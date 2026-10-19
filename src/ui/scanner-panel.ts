@@ -1,0 +1,278 @@
+import type { Bytes } from '../core/can/frame';
+import { formatValue, type PidInfo, type Vocab } from '../core/obd/explain';
+import { el } from './dom';
+import { hex2, hexBytes, parseHex } from './format';
+
+export type RequestFn = (payload: Bytes) => Promise<Bytes | null>;
+
+export interface ScannerPanelOptions {
+  vocab: Vocab;
+  request: RequestFn;
+  /** Pause between polling rounds, ms */
+  pollGapMs?: number;
+}
+
+export interface ScannerPanel {
+  root: HTMLElement;
+  /** Find supported PIDs (repeats 01 00, 01 20, ...) */
+  discover(): Promise<void>;
+  destroy(): void;
+}
+
+/** Every PID the vocabulary knows (except the bitmask PIDs 00, 20, 40, ...), ascending */
+export function listPids(vocab: Vocab): PidInfo[] {
+  const out: PidInfo[] = [];
+  for (let p = 1; p <= 0xff; p++) {
+    if (p % 0x20 === 0) continue;
+    const def = vocab.getPid(p);
+    if (def) out.push(def);
+  }
+  return out;
+}
+
+interface Row {
+  def: PidInfo;
+  tr: HTMLTableRowElement;
+  check: HTMLInputElement;
+  value: HTMLElement;
+  once: HTMLButtonElement;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const DEFAULT_ON = [0x0c, 0x0d];
+
+export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
+  const { vocab, request } = opts;
+  const gap = opts.pollGapMs ?? 300;
+  const pids = listPids(vocab);
+
+  const root = el('section', 'panel scanner-panel');
+  root.setAttribute('aria-labelledby', 'scan-title');
+
+  const head = el('header', 'panel-head');
+  const title = el('h2', 'panel-title', 'Scanner');
+  title.id = 'scan-title';
+  const spacer = el('span', 'spacer');
+  const pollBtn = el('button', 'btn btn-primary', '▶ Poll');
+  pollBtn.type = 'button';
+  pollBtn.setAttribute('aria-pressed', 'false');
+  head.append(title, spacer, pollBtn);
+
+  const statusRow = el('div', 'status-row');
+  const status = el('span', 'status', 'Looking for supported PIDs…');
+  status.setAttribute('role', 'status');
+  const findBtn = el('button', 'btn btn-quiet', 'Find again');
+  findBtn.type = 'button';
+  statusRow.append(status, findBtn);
+
+  const table = el('table', 'pid-table');
+  const thead = el('thead');
+  const hr = el('tr');
+  for (const [text, cls] of [['', 'th-check'], ['PID', 'th-pid'], ['Parameter', 'th-name'], ['Value', 'th-val'], ['', 'th-once']] as const) {
+    const th = el('th', cls, text);
+    th.scope = 'col';
+    hr.append(th);
+  }
+  thead.append(hr);
+  const tbody = el('tbody');
+  table.append(thead, tbody);
+  const tableWrap = el('div', 'table-wrap');
+  tableWrap.append(table);
+
+  const rows = new Map<number, Row>();
+  for (const def of pids) {
+    const tr = el('tr', 'pid-row');
+    const check = el('input');
+    check.type = 'checkbox';
+    check.checked = DEFAULT_ON.includes(def.pid);
+    check.setAttribute('aria-label', `Poll ${def.name}`);
+    const tdCheck = el('td', 'td-check');
+    tdCheck.append(check);
+
+    const name = el('td', 'td-name');
+    name.append(el('span', 'pid-name', def.name), el('span', 'pid-formula', def.formula));
+
+    const value = el('span', 'val', '-');
+    const tdVal = el('td', 'td-val');
+    tdVal.append(value);
+
+    const once = el('button', 'btn btn-icon', '↻');
+    once.type = 'button';
+    once.title = 'Read once: the request and the response show up in the log';
+    once.setAttribute('aria-label', `Read ${def.name} once`);
+    const tdOnce = el('td', 'td-once');
+    tdOnce.append(once);
+
+    tr.append(tdCheck, el('td', 'td-pid', hex2(def.pid)), name, tdVal, tdOnce);
+    tbody.append(tr);
+    const row: Row = { def, tr, check, value, once };
+    rows.set(def.pid, row);
+    once.addEventListener('click', () => void readOnce(row));
+  }
+
+  // Manual request
+  const manual = el('form', 'manual');
+  manual.noValidate = true;
+  const manualLabel = el('label', 'manual-label', 'Your own request (hex)');
+  const manualInput = el('input', 'manual-input');
+  manualInput.type = 'text';
+  manualInput.placeholder = '01 0C';
+  manualInput.autocomplete = 'off';
+  manualInput.spellcheck = false;
+  manualInput.id = 'manual-input';
+  manualLabel.htmlFor = manualInput.id;
+  const manualBtn = el('button', 'btn', 'Send');
+  manualBtn.type = 'submit';
+  const manualOut = el('p', 'manual-out');
+  manualOut.setAttribute('role', 'status');
+  const manualLine = el('div', 'manual-line');
+  manualLine.append(manualInput, manualBtn);
+  manual.append(manualLabel, manualLine, manualOut);
+
+  root.append(head, statusRow, tableWrap, manual);
+
+  // ---------- Logic ----------
+  let alive = true;
+  let polling = false;
+
+  const checkedRows = (): Row[] => [...rows.values()].filter((r) => r.check.checked && !r.check.disabled);
+
+  function setValue(row: Row, text: string, state: 'ok' | 'none' | 'error' | 'busy', title = ''): void {
+    row.value.textContent = text;
+    row.value.className = `val val-${state}`;
+    row.value.title = title;
+  }
+
+  async function safeRequest(payload: Bytes): Promise<Bytes | null> {
+    try {
+      return await request(payload);
+    } catch {
+      return null;
+    }
+  }
+
+  async function readOnce(row: Row): Promise<void> {
+    setValue(row, '…', 'busy');
+    const resp = await safeRequest([0x01, row.def.pid]);
+    if (!alive) return;
+    if (!resp) return setValue(row, 'no response', 'none', 'The ECU stayed silent: timeout, or the PID is not supported');
+    if (resp[0] === 0x7f) return setValue(row, `refusal ${hex2(resp[2] ?? 0)}`, 'error', hexBytes(resp));
+    if (resp[0] !== 0x41 || resp[1] !== row.def.pid) return setValue(row, '?', 'error', `Unexpected response: ${hexBytes(resp)}`);
+    try {
+      const v = row.def.decode(resp.slice(2, 2 + row.def.length));
+      setValue(row, `${formatValue(v)}${row.def.unit ? ' ' + row.def.unit : ''}`, 'ok', hexBytes(resp));
+    } catch {
+      setValue(row, '?', 'error', `Could not decode: ${hexBytes(resp)}`);
+    }
+  }
+
+  function setPolling(on: boolean): void {
+    polling = on;
+    pollBtn.textContent = on ? '■ Stop' : '▶ Poll';
+    pollBtn.setAttribute('aria-pressed', String(on));
+    pollBtn.classList.toggle('is-on', on);
+  }
+
+  async function pollLoop(): Promise<void> {
+    while (alive && polling) {
+      const batch = checkedRows();
+      if (batch.length === 0) {
+        setPolling(false);
+        status.textContent = 'Tick at least one PID.';
+        return;
+      }
+      for (const row of batch) {
+        if (!alive || !polling) return;
+        await readOnce(row);
+      }
+      await sleep(gap);
+    }
+  }
+
+  pollBtn.addEventListener('click', () => {
+    if (polling) {
+      setPolling(false);
+      return;
+    }
+    if (checkedRows().length === 0) {
+      status.textContent = 'Tick at least one PID.';
+      return;
+    }
+    setPolling(true);
+    void pollLoop();
+  });
+
+  let discovering = false;
+  async function discover(): Promise<void> {
+    if (discovering) return;
+    discovering = true;
+    findBtn.disabled = true;
+    status.textContent = 'Looking for supported PIDs…';
+    const supported = new Set<number>();
+    let answered = false;
+    let base = 0;
+    while (alive && base <= 0xc0) {
+      const resp = await safeRequest([0x01, base]);
+      if (!resp || resp[0] !== 0x41 || resp[1] !== base) break;
+      answered = true;
+      const list = vocab.decodeSupportedPids ? vocab.decodeSupportedPids(base, resp.slice(2, 6)) : [];
+      list.forEach((p) => supported.add(p));
+      if (!list.includes(base + 0x20)) break;
+      base += 0x20;
+    }
+    discovering = false;
+    findBtn.disabled = false;
+    if (!alive) return;
+
+    if (!answered) {
+      for (const row of rows.values()) markSupport(row, true);
+      status.textContent = 'The ECU did not answer 01 00. All PIDs stay available to try.';
+      return;
+    }
+    let found = 0;
+    for (const row of rows.values()) {
+      const ok = supported.has(row.def.pid);
+      if (ok) found++;
+      markSupport(row, ok);
+    }
+    status.textContent = `ECU supports ${found} of ${rows.size} PIDs in this table.`;
+  }
+
+  function markSupport(row: Row, ok: boolean): void {
+    row.tr.classList.toggle('unsupported', !ok);
+    row.check.disabled = !ok;
+    row.once.disabled = !ok;
+    if (!ok) row.check.checked = false;
+    row.tr.title = ok ? '' : 'The ECU did not list this PID in its support bitmasks (01 00, 01 20, ...)';
+  }
+
+  findBtn.addEventListener('click', () => void discover());
+
+  manual.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const parsed = parseHex(manualInput.value);
+    if (!parsed.ok) {
+      manualOut.className = 'manual-out is-error';
+      manualOut.textContent = parsed.error;
+      return;
+    }
+    manualOut.className = 'manual-out';
+    manualOut.textContent = 'Waiting for the response…';
+    manualBtn.disabled = true;
+    void safeRequest(parsed.bytes).then((resp) => {
+      manualBtn.disabled = false;
+      if (!alive) return;
+      manualOut.textContent = resp ? `Response: ${hexBytes(resp)}` : 'No response (100 ms timeout).';
+      manualOut.className = resp ? 'manual-out' : 'manual-out is-error';
+    });
+  });
+
+  return {
+    root,
+    discover,
+    destroy() {
+      alive = false;
+      polling = false;
+    },
+  };
+}
