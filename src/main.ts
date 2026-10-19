@@ -1,60 +1,43 @@
-import './style.css'
-import heroImg from './assets/hero.png'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import { setupCounter } from './counter.ts'
+import { VirtualBus } from './core/can/bus';
+import { formatFrame, hex } from './core/can/frame';
+import { createSystemClock } from './core/clock';
+import { Scanner } from './core/scanner/scanner';
+import { attachEcu } from './core/vehicle/ecu';
+import { createStubState } from './core/vehicle/model';
+import { SimTransport } from './transport/sim';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+const clock = createSystemClock();
+const bus = new VirtualBus(clock);
 
-<div class="ticks"></div>
+// Temporary "bus log": just another subscriber. Remove this line and nothing breaks.
+bus.subscribe((frame) => console.log(formatFrame(frame)));
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+const state = createStubState();
+attachEcu(bus, clock, () => state);
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+const scanner = new Scanner(new SimTransport(bus, clock));
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+async function demo(): Promise<void> {
+  console.log('— Which PIDs does the ECU support?');
+  const supported = await scanner.readSupportedPids();
+  console.log('ECU supports:', supported.map((p) => hex(p)).join(' '));
+
+  console.log('— Engine RPM');
+  const rpm = await scanner.readPid(0x0c);
+  console.log(rpm ? `RPM: ${rpm.value} ${rpm.unit}` : 'RPM: no response');
+
+  console.log('— Unsupported PID 0A: the ECU stays silent, the scanner waits 100 ms');
+  const silent = await scanner.request([0x01, 0x0a]);
+  console.log(silent ? hex(silent) : 'No response (timeout)');
+
+  console.log('— Unknown service 22 as a physical request to 7E0');
+  const negative = await scanner.request([0x22, 0xf1, 0x90], { physical: true });
+  console.log(negative ? `Negative response: ${hex(negative)} (11 = service not supported)` : 'No response');
+}
+
+void demo();
+
+// So the page isn't blank. typeof — because this file can also run in Node.
+if (typeof document !== 'undefined') {
+  document.querySelector('#app')!.textContent = 'Result in the console (F12 → Console).';
+}
