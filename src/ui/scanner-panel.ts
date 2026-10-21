@@ -12,12 +12,18 @@ export interface ScannerPanelOptions {
   request: RequestFn;
   /** Pause between polling rounds, ms */
   pollGapMs?: number;
+  /** What the car is doing right now, to word failures correctly. Without a car the panel stays generic. */
+  ecu?: { powered(): boolean; engineRunning(): boolean };
 }
 
 export interface ScannerPanel {
   root: HTMLElement;
   /** Find supported PIDs (repeats 01 00, 01 20, ...) */
   discover(): Promise<void>;
+  /** The key went to Off: the status line must not claim the ECU still answers */
+  ecuOff(): void;
+  /** Same as the Clear codes button; resolves to the text shown next to it */
+  clearCodes(): Promise<string>;
   destroy(): void;
 }
 
@@ -47,6 +53,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   const { vocab, request } = opts;
   const gap = opts.pollGapMs ?? 300;
   const pids = listPids(vocab);
+  const silent = (): string => (opts.ecu && !opts.ecu.powered() ? 'no response: the ECU is off (key Off)' : 'no response');
 
   const root = el('section', 'panel scanner-panel');
   root.setAttribute('aria-labelledby', 'scan-title');
@@ -154,7 +161,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   manualLine.append(manualInput, manualBtn);
   manual.append(manualLabel, manualLine, manualOut);
 
- root.append(head, statusRow, tableWrap, vehicle, manual);
+ root.append(head, statusRow, vehicle, tableWrap, manual); // the long-response buttons sit above the long PID table
 
   // ---------- Logic ----------
   let alive = true;
@@ -285,7 +292,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     void safeRequest([0x09, 0x02]).then((resp) => {
       vinBtn.disabled = false;
       if (!alive) return;
-      if (!resp) return showOut(vinOut, 'no response', false);
+      if (!resp) return showOut(vinOut, silent(), false);
       const vin = decodeVinResponse(resp);
       showOut(vinOut, vin ?? `not a VIN: ${hexBytes(resp)}`, vin !== null);
     });
@@ -297,7 +304,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     void safeRequest([0x03]).then((resp) => {
       dtcBtn.disabled = false;
       if (!alive) return;
-      if (!resp) return showOut(dtcOut, 'no response', false);
+      if (!resp) return showOut(dtcOut, silent(), false);
       if (resp[0] !== 0x43) return showOut(dtcOut, `unexpected: ${hexBytes(resp)}`, false);
       const count = resp[1] ?? 0;
       const body = resp.slice(2, 2 + 2 * count);
@@ -307,24 +314,28 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     });
   });
 
-clearBtn.addEventListener('click', () => {
+  function clearCodes(): Promise<string> {
     clearBtn.disabled = true;
     showOut(clearOut, '…', true);
-    void safeRequest([0x04]).then((resp) => {
+    return safeRequest([0x04]).then((resp) => {
       clearBtn.disabled = false;
-      if (!alive) return;
-      if (!resp) return showOut(clearOut, 'no response', false);
-      if (resp[0] === 0x44) {
-        showOut(clearOut, 'cleared (44)', true);
+      if (!alive) return '';
+      let text: string;
+      let ok = false;
+      if (!resp) text = silent();
+      else if (resp[0] === 0x44) {
+        text = 'cleared (44)';
+        ok = true;
         showOut(dtcOut, '-', true); // the codes shown above are gone now: read them again
-        return;
-      }
-      if (resp[0] === 0x7f && resp[2] === 0x22) {
-        return showOut(clearOut, `refused: ${hexBytes(resp)}, stop the engine first`, false);
-      }
-      showOut(clearOut, `unexpected: ${hexBytes(resp)}`, false);
+      } else if (resp[0] === 0x7f && resp[2] === 0x22) {
+        // rpm is still above 0 for a moment after the key leaves Engine
+        text = `refused: ${hexBytes(resp)}, ${opts.ecu && !opts.ecu.engineRunning() ? 'engine still turning, wait a second' : 'stop the engine first'}`;
+      } else text = `unexpected: ${hexBytes(resp)}`;
+      showOut(clearOut, text, ok);
+      return text;
     });
-  });
+  }
+  clearBtn.addEventListener('click', () => void clearCodes());
 
   manual.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -348,6 +359,10 @@ clearBtn.addEventListener('click', () => {
   return {
     root,
     discover,
+    clearCodes,
+    ecuOff() {
+      if (!discovering) status.textContent = 'ECU is off (key Off): nothing answers until Ignition.';
+    },
     destroy() {
       alive = false;
       polling = false;

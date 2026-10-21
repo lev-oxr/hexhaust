@@ -91,3 +91,71 @@ describe('car panel', () => {
     expect(car.ecuExtraDelayMs).toBe(145);
   });
 });
+
+describe('BUG-1: a hidden tab does not make healthy replies LATE', () => {
+  const setHidden = (hidden: boolean): void => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  afterEach(() => setHidden(false));
+
+  it('the clock stands still while hidden and goes on afterwards', () => {
+    const clock = createSystemClock();
+    vi.advanceTimersByTime(100);
+    setHidden(true);
+    vi.advanceTimersByTime(5000);
+    expect(clock.now()).toBe(100);
+    setHidden(false);
+    vi.advanceTimersByTime(50);
+    expect(clock.now()).toBe(150);
+  });
+
+  it('the car does not step on throttled timers while hidden', () => {
+    const car = new Car(createSystemClock(), createStubState(), { key: 'engine' });
+    car.start();
+    vi.advanceTimersByTime(1000);
+    const rpm = car.state.rpm;
+    setHidden(true);
+    vi.advanceTimersByTime(3000);
+    expect(car.state.rpm).toBe(rpm);
+    car.stop();
+  });
+});
+
+
+describe('car panel: QA fixes', () => {
+  const mount = (): CarPanel => {
+    panel.destroy(); // the one from beforeEach
+    panel = createCarPanel(car);
+    document.body.replaceChildren(panel.root);
+    return panel;
+  };
+  const gear = (p: CarPanel): string => p.root.querySelectorAll('.readout-v')[0].textContent ?? '';
+
+  it('BUG-6: engine off while rolling shows N, parked shows P', () => {
+    const p = mount();
+    car.setKey('ignition');
+    expect(gear(p)).toBe('P');
+    (car as unknown as { current: unknown }).current = { ...car.state, speedKmh: 27, gear: 3 };
+    car.setPedal(0); // triggers a redraw
+    expect(gear(p)).toBe('N');
+    car.setKey('engine');
+    expect(gear(p)).toBe('3');
+  });
+
+  it('proposal 1: a ticked fault says what the monitor waits for', () => {
+    const p = mount();
+    car.setFault('lean', true);
+    const chip = p.root.querySelectorAll('.chip')[1];
+    expect(chip.textContent).toBe('start the engine');
+    car.setKey('engine');
+    expect(chip.textContent).toBe('waiting for 40 °C');
+  });
+
+  it('proposal 5: the bulb check is named', () => {
+    const p = mount();
+    expect(p.root.querySelector('.mil-note')!.textContent).toBe('');
+    car.setKey('ignition');
+    expect(p.root.querySelector('.mil-note')!.textContent).toContain('bulb check');
+  });
+});

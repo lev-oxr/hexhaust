@@ -37,6 +37,11 @@ export class Reassembler {
         return this.total > 0;
     }
 
+    /** Sequence number of the Consecutive Frame it waits for next. */
+    get expected(): number {
+        return this.nextSn;
+    }
+
     /** Drop whatever was half-received. Called on a timeout. */
     reset(): void {
         this.buffer = [];

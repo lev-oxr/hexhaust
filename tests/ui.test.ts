@@ -3,8 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Bytes, CanFrame } from '../src/core/can/frame';
 import { mountApp, type App } from '../src/ui/app';
-import { MAX_ROWS } from '../src/ui/bus-log';
-import { PID_COUNT } from './helpers/fake-vocab';
+import { createBusLog, MAX_ROWS } from '../src/ui/bus-log';
+import { createScannerPanel } from '../src/ui/scanner-panel';
+import { decodeSupportedPids, getPid, PID_COUNT } from './helpers/fake-vocab';
 
 vi.mock('../src/core/obd/pids', async () => {
   const m = await import('./helpers/fake-vocab');
@@ -261,5 +262,89 @@ describe('theme', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
     btn.click();
     expect(document.documentElement.dataset.theme).toBeUndefined();
+  });
+});
+
+const vocab = { getPid, decodeSupportedPids };
+const pad = (b: Bytes): Bytes => [...b, ...Array<number>(8 - b.length).fill(0x55)];
+const frame = (id: number, from: 'tester' | 'ecu', data: Bytes, t: number): CanFrame => ({ id, from, data, t });
+
+describe('bus log: QA fixes', () => {
+  const make = (extra = {}) => createBusLog({ vocab, onSelect: () => {}, ...extra });
+  const descs = (log: ReturnType<typeof make>): string[] => [...log.root.querySelectorAll('.c-desc')].map((d) => d.textContent ?? '');
+
+  it('BUG-5: Clear tells the app, so the inspector can be reset', () => {
+    const onClear = vi.fn();
+    const log = make({ onClear });
+    log.add(frame(0x7df, 'tester', pad([2, 1, 0x0c]), 1));
+    log.root.querySelector<HTMLButtonElement>('.btn')!.click();
+    expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it('proposal 3: mark() puts a line between frames, arrows skip it', () => {
+    const log = make();
+    log.add(frame(0x7df, 'tester', pad([2, 1, 0x0c]), 1));
+    log.mark('Key Off');
+    log.add(frame(0x7df, 'tester', pad([2, 1, 0x0d]), 2));
+    expect(log.root.querySelector('.log-mark')?.textContent).toBe('Key Off');
+    expect(log.rowCount()).toBe(2);
+    const rows = log.root.querySelectorAll<HTMLElement>('.log-row');
+    rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(rows[1].classList.contains('selected')).toBe(true);
+  });
+
+  it('proposal 7 / BUG-4: a cut-off long message is flagged on its last frame', () => {
+    const log = make();
+    log.add(frame(0x7df, 'tester', pad([2, 9, 2]), 1));
+    log.add(frame(0x7e8, 'ecu', [0x10, 0x14, 0x49, 0x02, 0x01, 0x31, 0x47, 0x31], 6));
+    log.add(frame(0x7e0, 'tester', pad([0x30, 0, 0]), 7));
+    log.mark('Key Off');
+    expect(descs(log)[1]).toContain('incomplete: waiting for CF #1');
+  });
+
+  it('a new request abandons the half-received answer', () => {
+    const log = make();
+    log.add(frame(0x7e8, 'ecu', [0x10, 0x14, 0x49, 0x02, 0x01, 0x31, 0x47, 0x31], 6));
+    log.add(frame(0x7df, 'tester', pad([2, 1, 0x0c]), 200));
+    expect(descs(log)[0]).toContain('incomplete: waiting for CF #1');
+  });
+
+  it('a finished message is not flagged', () => {
+    const log = make();
+    log.add(frame(0x7e8, 'ecu', [0x10, 0x09, 0x43, 0x03, 0x03, 0x00, 0x01, 0x71], 1));
+    log.add(frame(0x7e8, 'ecu', [0x21, 0x04, 0x20, 0x55, 0x55, 0x55, 0x55, 0x55], 2));
+    log.mark('x');
+    expect(descs(log).join()).not.toContain('incomplete');
+  });
+});
+
+describe('scanner panel: QA fixes', () => {
+  const make = (answer: Bytes | null, ecu: { powered: boolean; running: boolean }) =>
+    createScannerPanel({ vocab, request: async () => answer, ecu: { powered: () => ecu.powered, engineRunning: () => ecu.running } });
+  const out = (p: ReturnType<typeof make>, i: number): string => p.root.querySelectorAll('.vehicle-out')[i].textContent ?? '';
+
+  it('BUG-2 / proposal 2: refusal while the engine still turns down says to wait', async () => {
+    const p = make([0x7f, 0x04, 0x22], { powered: true, running: false });
+    await p.clearCodes();
+    expect(out(p, 2)).toBe('refused: 7F 04 22, engine still turning, wait a second');
+  });
+
+  it('a refusal with the engine running still says to stop it', async () => {
+    const p = make([0x7f, 0x04, 0x22], { powered: true, running: true });
+    await p.clearCodes();
+    expect(out(p, 2)).toContain('stop the engine first');
+  });
+
+  it('BUG-3: ecuOff() replaces the stale "supports 15 of 15" line', () => {
+    const p = make(null, { powered: false, running: false });
+    p.root.querySelector('.status')!.textContent = 'ECU supports 15 of 15 PIDs in this table.';
+    p.ecuOff();
+    expect(p.root.querySelector('.status')!.textContent).toContain('ECU is off');
+  });
+
+  it('BUG-4: silence with the key off says so', async () => {
+    const p = make(null, { powered: false, running: false });
+    p.root.querySelectorAll<HTMLButtonElement>('.vehicle .btn')[0].click();
+    await vi.waitFor(() => expect(out(p, 0)).toBe('no response: the ECU is off (key Off)'));
   });
 });

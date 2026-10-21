@@ -27,6 +27,7 @@ export class MessageTracker {
     private readonly vocab: Vocab;
     private readonly rx = new Map<number, Reassembler>(); // one receiver per CAN ID
     private readonly progress = new Map<number, Progress>();
+    private readonly reported = new Set<number>(); // stalled messages already pointed out
 
     constructor(vocab: Vocab) {
         this.vocab = vocab;
@@ -35,6 +36,21 @@ export class MessageTracker {
     reset(): void {
         this.rx.clear();
         this.progress.clear();
+        this.reported.clear();
+    }
+
+    /**
+     * Long messages that started but did not finish while something else happened (a new request, key off).
+     * Each one is returned once, with the Consecutive Frame it was still waiting for.
+     */
+    stalled(): { id: number; next: number }[] {
+        const out: { id: number; next: number }[] = [];
+        for (const id of this.progress.keys()) {
+            if (this.reported.has(id)) continue;
+            this.reported.add(id);
+            out.push({ id, next: this.rx.get(id)?.expected ?? 1 });
+        }
+        return out;
     }
 
     /**
@@ -51,6 +67,7 @@ export class MessageTracker {
 
         switch (r.type) {
             case 'first':
+                this.reported.delete(frame.id);
                 this.progress.set(frame.id, { total: r.total, bytes: [...r.head] });
                 return {
                     rows: [

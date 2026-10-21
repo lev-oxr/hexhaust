@@ -107,8 +107,12 @@ export class Car {
     /** Starts the timer. Safe to call twice. */
     start(): void {
         if (this.timer !== null) return;
+        let lastNow = this.clock.now();
         const loop = (): void => {
-            this.step();
+            // The clock stands still in a hidden tab: don't let the throttled timer creep the physics forward.
+            const now = this.clock.now();
+            if (now > lastNow) this.step();
+            lastNow = now;
             this.timer = this.clock.setTimeout(loop, this.tickMs);
         };
         this.timer = this.clock.setTimeout(loop, this.tickMs);

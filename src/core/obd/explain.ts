@@ -40,6 +40,8 @@ export interface PidInfo {
   length: number;
   formula: string;
   decode(data: Bytes): number;
+  /** Text for the result when "value unit" is not enough (01 01: "MIL on, 3 code(s)") */
+  show?(data: Bytes): string;
 }
 
 export interface Vocab {
@@ -324,7 +326,7 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
       } else if (def && used.length >= def.length) {
         const vals = used.map(val);
         const value = def.decode(vals);
-        const shown = `${formatValue(value)}${def.unit ? ' ' + def.unit : ''}`;
+        const shown = def.show ? def.show(vals) : `${formatValue(value)}${def.unit ? ' ' + def.unit : ''}`;
         out.summary = `response: ${def.name} = ${shown}`;
         out.calc = { formula: def.formula, substituted: substitute(def.formula, vals), result: shown };
       } else if (def) {

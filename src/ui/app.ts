@@ -13,6 +13,7 @@ import '../styles/car.css';                       // next to main.css
 import { MONITOR_STATUS_INFO, MONITOR_STATUS_PID } from '../core/obd/monitor-status';
 import type { Car } from '../core/vehicle/car';
 import { createCarPanel } from './car-panel';
+import { createMinibar } from './minibar';
 
 export interface AppDeps {
   /** Virtual bus: subscribing to frames is all the UI needs */
@@ -53,8 +54,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
       const narrow = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches;
       if (narrow) inspector.root.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
     },
+    onClear: () => inspector.show(null), // otherwise it keeps showing a frame that is no longer in the log
   });
-  const scanner = createScannerPanel({ vocab, request: (p: Bytes) => deps.request(p) });
+  const car = deps.car;
+  const scanner = createScannerPanel({
+    vocab,
+    request: (p: Bytes) => deps.request(p),
+    ecu: car && { powered: () => car.powered, engineRunning: () => car.running },
+  });
+  const minibar = car ? createMinibar(car, () => scanner.clearCodes()) : null;
 
   const main = el('main', 'layout');
   const side = el('div', 'col col-side');
@@ -65,7 +73,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
   wide.append(log.root, inspector.root);
   main.append(side, wide);
 
-  root.replaceChildren(header, main);
+  root.replaceChildren(...(minibar ? [header, minibar.root, main] : [header, main]));
 
   const unsubscribe = deps.bus.subscribe((f) => log.add(f));
   void scanner.discover();
@@ -73,7 +81,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
   // the way a real scanner reconnects.
   let wasPowered = deps.car?.powered ?? true;
   const unsubscribeCar = deps.car?.subscribe((car) => {
-    if (car.powered && !wasPowered) void scanner.discover();
+    if (car.powered && !wasPowered) {
+      log.mark('Ignition: the ECU is back on the bus');
+      void scanner.discover();
+    } else if (!car.powered && wasPowered) {
+      log.mark('Key Off: the ECU is off, nothing is sent or answered until Ignition');
+      scanner.ecuOff();
+    }
     wasPowered = car.powered;
   });
 
@@ -82,6 +96,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
       unsubscribe();
       scanner.destroy();
       carPanel?.destroy();
+      minibar?.destroy();
       unsubscribeCar?.();
     },
   };

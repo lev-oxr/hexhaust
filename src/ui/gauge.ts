@@ -57,6 +57,7 @@ export function createGauge(o: GaugeOptions): Gauge {
   pic.append(svg('path', { d: arc(-SWEEP, SWEEP, R), class: 'g-track' }));
   if (o.redFrom !== undefined) pic.append(svg('path', { d: arc(angleOf(o.redFrom), SWEEP, R), class: 'g-red' }));
 
+  const nums: SVGTextElement[] = []; // drawn after the needle, so the needle passes under the numbers
   for (let v = 0; v <= o.max; v += o.majorStep) {
     const a = angleOf(v);
     const [x1, y1] = at(a, R - 1);
@@ -65,11 +66,11 @@ export function createGauge(o: GaugeOptions): Gauge {
     const [tx, ty] = at(a, R - 15);
     const t = svg('text', { x: tx.toFixed(1), y: (ty + 3).toFixed(1), class: 'g-num' });
     t.textContent = o.tickLabel ? o.tickLabel(v) : String(v);
-    pic.append(t);
+    nums.push(t);
   }
 
   const needle = svg('line', { x1: CX, y1: CY + 6, x2: CX, y2: CY - R + 8, class: 'g-needle' });
-  pic.append(needle, svg('circle', { cx: CX, cy: CY, r: 4, class: 'g-hub' }));
+  pic.append(needle, svg('circle', { cx: CX, cy: CY, r: 4, class: 'g-hub' }), ...nums);
 
   const value = svg('text', { x: CX, y: 88, class: 'g-value' });
   const unit = svg('text', { x: CX, y: 98, class: 'g-unit' });

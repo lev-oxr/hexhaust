@@ -39,4 +39,8 @@ export const MONITOR_STATUS_INFO: PidInfo = {
     length: 4,
     formula: 'A AND 7F; MIL = bit 7 of A',
     decode: (data) => decodeMonitorStatus(data).storedCount,
+    show(data) {
+        const { milOn, storedCount } = decodeMonitorStatus(data);
+        return `MIL ${milOn ? 'on' : 'off'}, ${storedCount} code(s)`;
+    },
 };

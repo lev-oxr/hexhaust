@@ -26,11 +26,15 @@ export interface LogEntry {
 export interface BusLogOptions {
   vocab: Vocab;
   onSelect(entry: LogEntry): void;
+  /** The log was emptied: whatever was selected is gone */
+  onClear?(): void;
 }
 
 export interface BusLog {
   root: HTMLElement;
   add(frame: CanFrame): void;
+  /** A line between frames for something that is not a frame (the ECU went off, came back) */
+  mark(text: string): void;
   clear(): void;
   /** How many rows are currently kept (for tests) */
   rowCount(): number;
@@ -73,6 +77,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
   let seq = 0;
   let total = 0;
   let selected: HTMLElement | null = null;
+  const lastRow = new Map<number, { entry: LogEntry; row: HTMLElement }>(); // newest frame per response ID
   const lateness = createLatenessTracker();
 
   const updateCounter = (): void => {
@@ -125,8 +130,11 @@ export function createBusLog(opts: BusLogOptions): BusLog {
       select(row);
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const next = (e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling) as HTMLElement | null;
-      if (next?.classList.contains('log-row')) {
+      let next = (e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling) as HTMLElement | null;
+      while (next && !next.classList.contains('log-row')) {
+        next = (e.key === 'ArrowDown' ? next.nextElementSibling : next.previousElementSibling) as HTMLElement | null; // skip marks
+      }
+      if (next) {
         next.focus();
         select(next);
       }
@@ -143,8 +151,33 @@ export function createBusLog(opts: BusLogOptions): BusLog {
 
   clearBtn.addEventListener('click', () => clear());
 
+  /** A long message that never finished: say so on its last frame, the way a receiver would notice. */
+  function flagStalled(): void {
+    for (const { id, next } of tracker.stalled()) {
+      const last = lastRow.get(id);
+      if (!last) continue;
+      const cf = next.toString(16).toUpperCase();
+      last.entry.ex.summary += ` · incomplete: waiting for CF #${cf}`;
+      last.entry.ex.notes.push(`The long message stopped here: Consecutive Frame #${cf} never came (the scanner gave up or the ECU went off).`);
+      const desc = last.row.querySelector('.c-desc');
+      if (desc) desc.textContent = last.entry.ex.summary;
+    }
+  }
+
+  function mark(text: string): void {
+    flagStalled();
+    if (empty.isConnected) empty.remove();
+    const stick = follow.checked;
+    const line = el('div', 'log-mark', text);
+    line.setAttribute('role', 'presentation');
+    list.append(line);
+    if (stick) list.scrollTop = list.scrollHeight;
+  }
+
   function add(frame: CanFrame): void {
     if (empty.isConnected) empty.remove();
+    // A new request (Single Frame from the tester) while a long answer is half-received: the old one is abandoned
+    if (frame.from === 'tester' && frame.data[0] >> 4 === 0) flagStalled();
     const stick = follow.checked;
     const entry: LogEntry = { seq: seq++, frame, ex: explainFrame(frame, opts.vocab) };
     entry.message = tracker.annotate(frame, entry.ex);
@@ -154,12 +187,15 @@ export function createBusLog(opts: BusLogOptions): BusLog {
       entry.late = true;
     }
     entries.set(entry.seq, entry);
-    list.append(buildRow(entry));
+    const row = buildRow(entry);
+    list.append(row);
+    if (entry.ex.direction === 'response') lastRow.set(frame.id, { entry, row });
     total++;
     while (list.childElementCount > MAX_ROWS) {
       const first = list.firstElementChild as HTMLElement;
       entries.delete(Number(first.dataset.seq));
       if (first === selected) selected = null;
+      for (const [id, v] of lastRow) if (v.row === first) lastRow.delete(id);
       first.remove();
     }
     updateCounter();
@@ -169,12 +205,14 @@ export function createBusLog(opts: BusLogOptions): BusLog {
   function clear(): void {
     list.replaceChildren(empty);
     entries.clear();
+    lastRow.clear();
     tracker.reset();
     selected = null;
     total = 0;
     follow.checked = true;
     updateCounter();
+    opts.onClear?.();
   }
 
-  return { root, add, clear, rowCount: () => entries.size };
+  return { root, add, mark, clear, rowCount: () => entries.size };
 }

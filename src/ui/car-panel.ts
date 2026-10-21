@@ -1,6 +1,6 @@
 // Car panel: key, pedals, gauges, MIL, faults. It drives the Car and redraws on every car step.
 import type { Car } from '../core/vehicle/car';
-import { FAULTS, type CodeStatus, type FaultId } from '../core/vehicle/faults';
+import { canRun, FAULTS, type CodeStatus, type FaultDef, type FaultId } from '../core/vehicle/faults';
 import type { KeyPosition } from '../core/vehicle/physics';
 import { el } from './dom';
 import { createGauge } from './gauge';
@@ -77,7 +77,8 @@ export function createCarPanel(car: Car): CarPanel {
   title.id = 'car-title';
   const mil = el('span', 'mil', 'CHECK ENGINE');
   mil.setAttribute('role', 'img');
-  head.append(title, el('span', 'spacer'), mil);
+  const milNote = el('span', 'mil-note');
+  head.append(title, el('span', 'spacer'), milNote, mil);
 
   const body = el('div', 'car-body');
 
@@ -185,6 +186,12 @@ export function createCarPanel(car: Car): CarPanel {
     if (node.textContent !== text) node.textContent = text;
   };
 
+  /** An enabled fault the monitor cannot see yet: say what it is waiting for instead of "no code" */
+  function waitingText(f: FaultDef): string {
+    if (!car.running) return 'start the engine';
+    return canRun(f, { running: true, coolantC: car.state.coolantC }) ? STATUS_TEXT.none : `waiting for ${f.warmC} °C`;
+  }
+
   function render(): void {
     const s = car.state;
     const inp = car.inputs;
@@ -194,7 +201,8 @@ export function createCarPanel(car: Car): CarPanel {
     timing.set(car.ecuExtraDelayMs);
     tacho.set(powered ? s.rpm : null);
     speedo.set(powered ? s.speedKmh : null);
-    setText(gearOut, powered ? (s.speedKmh < 1 && s.rpm === 0 ? 'P' : String(s.gear)) : '-');
+    // Engine off: parked (P) or coasting in neutral (N); the gear number only means something while running
+    setText(gearOut, !powered ? '-' : car.running ? String(s.gear) : s.speedKmh < 1 ? 'P' : 'N');
     setText(coolantOut, powered ? `${Math.round(s.coolantC)} °C` : '-');
     setText(ecuOut, powered ? 'on' : 'off');
     ecuOut.classList.toggle('is-off', !powered);
@@ -206,6 +214,7 @@ export function createCarPanel(car: Car): CarPanel {
 
     // The lamp lights for a bulb check with the ignition on, then shows the real MIL once running
     const milLit = powered && (s.milOn || !car.running);
+    setText(milNote, powered && !car.running ? 'bulb check at Ignition' : '');
     mil.classList.toggle('is-on', milLit);
     mil.setAttribute('aria-label', milLit ? 'MIL on' : 'MIL off');
     mil.title = !powered
@@ -219,7 +228,7 @@ export function createCarPanel(car: Car): CarPanel {
     for (const f of FAULTS) {
       const st = car.faults.status(f.id);
       const chip = chips.get(f.id)!;
-      setText(chip, STATUS_TEXT[st]);
+      setText(chip, st === 'none' && car.faults.isActive(f.id) ? waitingText(f) : STATUS_TEXT[st]);
       chip.className = `chip chip-${st}`;
       const box = boxes.get(f.id)!;
       if (box.checked !== car.faults.isActive(f.id)) box.checked = car.faults.isActive(f.id);

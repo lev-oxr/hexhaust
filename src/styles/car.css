@@ -134,6 +134,9 @@
   stroke-width: 1.2;
 }
 .g-num {
+  paint-order: stroke;
+  stroke: var(--gauge-face);
+  stroke-width: 2.5px;
   fill: var(--muted);
   font: 7px var(--mono);
   text-anchor: middle;
@@ -312,6 +315,52 @@
   color: var(--r-error);
 }
 
+/* Lamp test note next to the MIL */
+.mil-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* Minibar: sticks to the top while you scroll down to the scanner */
+.minibar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+.mini-item {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.mini-item.is-on {
+  color: var(--mil);
+  font-weight: 700;
+}
+.mini-item.is-off {
+  opacity: 0.6;
+}
+.mini-out {
+  color: var(--muted);
+}
+
+/* A line in the bus log that is not a frame */
+.log-mark {
+  padding: 3px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: italic 0.78rem var(--sans);
+}
+
 /* Bus log: a response that came after the scanner stopped waiting */
 .log-row.is-late {
   box-shadow: inset 3px 0 0 var(--warn);
@@ -321,6 +370,12 @@
 }
 
 @media (max-width: 640px) {
+  /* a frame description wraps instead of being cut off with "…" */
+  .c-desc {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
   .readouts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

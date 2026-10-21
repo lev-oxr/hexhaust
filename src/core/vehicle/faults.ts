@@ -30,9 +30,11 @@ export interface FaultDef {
     trips: 1 | 2;
     /** How long the monitor must see the fault before it fails, seconds of engine running. */
     detectS: number;
-    /** Monitor enable conditions. */
-    canRun(ctx: MonitorContext): boolean;
+    /** Monitor enable conditions: engine running and at least this warm, °C. */
+    warmC: number;
 }
+
+export const canRun = (def: FaultDef, ctx: MonitorContext): boolean => ctx.running && ctx.coolantC >= def.warmC;
 
 export const FAULTS: readonly FaultDef[] = [
     {
@@ -42,7 +44,7 @@ export const FAULTS: readonly FaultDef[] = [
         hint: 'The RPM shakes. One-trip: stored with the MIL right away.',
         trips: 1,
         detectS: 2,
-        canRun: (c) => c.running,
+        warmC: 0,
     },
     {
         id: 'lean',
@@ -51,7 +53,7 @@ export const FAULTS: readonly FaultDef[] = [
         hint: 'Fuel trims 06 and 07 go positive once warm (40 °C). Two-trip.',
         trips: 2,
         detectS: 4,
-        canRun: (c) => c.running && c.coolantC >= 40,
+        warmC: 40,
     },
     {
         id: 'catalyst',
@@ -60,7 +62,7 @@ export const FAULTS: readonly FaultDef[] = [
         hint: 'No symptom you can feel; tested only on a warm engine (70 °C). Two-trip.',
         trips: 2,
         detectS: 6,
-        canRun: (c) => c.running && c.coolantC >= 70,
+        warmC: 70,
     },
 ];
 
@@ -105,7 +107,7 @@ export class FaultMonitor {
     tick(dtS: number, ctx: MonitorContext): void {
         for (const def of FAULTS) {
             const t = this.track(def.id);
-            if (!t.active || t.failedThisCycle || !def.canRun(ctx)) continue;
+            if (!t.active || t.failedThisCycle || !canRun(def, ctx)) continue;
             t.seenS += dtS;
             if (t.seenS < def.detectS) continue;
 
