@@ -8,6 +8,7 @@ import { el } from './dom';
 import { createInspector } from './inspector';
 import { createScannerPanel, type RequestFn } from './scanner-panel';
 import { createThemeToggle } from './theme';
+import { decodeDtc } from '../core/obd/dtc';
 
 export interface AppDeps {
   /** Virtual bus: subscribing to frames is all the UI needs */
@@ -16,8 +17,8 @@ export interface AppDeps {
   request: RequestFn;
 }
 
-/** Dictionary for frame breakdowns: PIDs from pids.ts. Stage 5 adds decodeDtc from dtc.ts here. */
-export const vocab: Vocab = { getPid, decodeSupportedPids: parseSupported };
+/** Dictionary for frame breakdowns: PIDs from pids.ts, trouble codes from dtc.ts. */
+export const vocab: Vocab = { getPid, decodeSupportedPids: parseSupported, decodeDtc };
 
 export interface App {
   destroy(): void;

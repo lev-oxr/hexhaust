@@ -79,3 +79,45 @@ describe('ECU: supported PID masks', () => {
         expect(respond([0x01, 0xe0], state, false)).toBeNull();
     });
 });
+describe('ECU: modes 03, 07, 09 (stage 5)', () => {
+    const ascii = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
+
+    it('03: three stored codes → 43 03 + 6 bytes, 8 in all (more than a Single Frame holds)', () => {
+        const resp = respond([0x03], state, false);
+        expect(resp).toEqual([0x43, 0x03, 0x03, 0x00, 0x04, 0x20, 0x01, 0x71]);
+        expect(resp!.length).toBeGreaterThan(7);
+    });
+
+    it('03 and 07 without codes: 43 00 / 47 00', () => {
+        expect(respond([0x03], { ...state, storedDtcs: [] }, false)).toEqual([0x43, 0x00]);
+        expect(respond([0x07], state, false)).toEqual([0x47, 0x00]);
+    });
+
+    it('07 reports pending codes', () => {
+        expect(respond([0x07], { ...state, pendingDtcs: ['P0128'] }, false)).toEqual([0x47, 0x01, 0x01, 0x28]);
+    });
+
+    it('09 02: VIN, 20 bytes', () => {
+        const resp = respond([0x09, 0x02], state, false);
+        expect(resp).toEqual([0x49, 0x02, 0x01, ...ascii('1G1JC5444R7252367')]);
+        expect(resp).toHaveLength(20);
+    });
+
+    it('09 00: of mode 09 the ECU supports only PID 02', () => {
+        const resp = respond([0x09, 0x00], state, false);
+        expect(resp).toEqual([0x49, 0x00, 0x40, 0x00, 0x00, 0x00]);
+        expect(parseSupported(0x00, resp!.slice(2))).toEqual([0x02]);
+    });
+
+    it('09 with an unknown PID: silence', () => {
+        expect(respond([0x09, 0x0a], state, true)).toBeNull();
+    });
+
+    it('04 is still unknown until stage 6', () => {
+        expect(respond([0x04], state, true)).toEqual([0x7f, 0x04, 0x11]);
+    });
+
+    it.each([[[0x03]], [[0x07]], [[0x09, 0x00]], [[0x09, 0x02]]])('%j: the response passes isResponseTo', (req) => {
+        expect(isResponseTo(req, respond(req, state, false)!)).toBe(true);
+    });
+});

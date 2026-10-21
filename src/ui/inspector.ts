@@ -71,6 +71,18 @@ export function createInspector(): Inspector {
       parts.push(calc);
     }
 
+    // Frames of a long message: where this frame stands and what the whole message says
+    if (entry.message) {
+      const msg = el('div', 'calc msg');
+      msg.append(el('h3', 'calc-title', 'Long message (ISO-TP)'));
+      for (const [k, v] of entry.message.rows) {
+        const r = el('div', k === 'meaning' ? 'calc-row calc-result' : 'calc-row');
+        r.append(el('span', 'calc-k', k), el('code', 'calc-v', v));
+        msg.append(r);
+      }
+      parts.push(msg);
+    }
+
     if (ex.notes.length > 0) {
       const notes = el('ul', 'notes');
       for (const n of ex.notes) notes.append(el('li', undefined, n));

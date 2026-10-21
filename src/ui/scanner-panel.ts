@@ -1,5 +1,7 @@
 import type { Bytes } from '../core/can/frame';
+import { decodeDtcList } from '../core/obd/dtc';
 import { formatValue, type PidInfo, type Vocab } from '../core/obd/explain';
+import { decodeVinResponse } from '../core/obd/vin';
 import { el } from './dom';
 import { hex2, hexBytes, parseHex } from './format';
 
@@ -110,6 +112,24 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     once.addEventListener('click', () => void readOnce(row));
   }
 
+  // Vehicle info: responses longer than one frame (ISO-TP)
+  const vehicle = el('div', 'vehicle');
+  vehicle.append(el('h3', 'sub-title', 'Long responses (ISO-TP)'));
+  const vinBtn = el('button', 'btn', 'Read VIN');
+  vinBtn.type = 'button';
+  vinBtn.title = 'Request 09 02: 20 bytes, sent as First Frame + Consecutive Frames';
+  const vinOut = el('output', 'vehicle-out', '-');
+  const dtcBtn = el('button', 'btn', 'Read codes');
+  dtcBtn.type = 'button';
+  dtcBtn.title = 'Request 03: stored trouble codes. Three or more codes take several frames';
+  const dtcOut = el('output', 'vehicle-out', '-');
+  for (const [btn, out] of [[vinBtn, vinOut], [dtcBtn, dtcOut]] as const) {
+    out.setAttribute('role', 'status');
+    const line = el('div', 'vehicle-line');
+    line.append(btn, out);
+    vehicle.append(line);
+  }
+
   // Manual request
   const manual = el('form', 'manual');
   manual.noValidate = true;
@@ -129,7 +149,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   manualLine.append(manualInput, manualBtn);
   manual.append(manualLabel, manualLine, manualOut);
 
-  root.append(head, statusRow, tableWrap, manual);
+ root.append(head, statusRow, tableWrap, vehicle, manual);
 
   // ---------- Logic ----------
   let alive = true;
@@ -247,6 +267,40 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   }
 
   findBtn.addEventListener('click', () => void discover());
+
+    /** Shows a result in an output line; red when something went wrong. */
+  function showOut(out: HTMLElement, text: string, ok: boolean): void {
+    out.textContent = text;
+    out.className = ok ? 'vehicle-out' : 'vehicle-out is-error';
+  }
+
+  vinBtn.addEventListener('click', () => {
+    vinBtn.disabled = true;
+    showOut(vinOut, '…', true);
+    void safeRequest([0x09, 0x02]).then((resp) => {
+      vinBtn.disabled = false;
+      if (!alive) return;
+      if (!resp) return showOut(vinOut, 'no response', false);
+      const vin = decodeVinResponse(resp);
+      showOut(vinOut, vin ?? `not a VIN: ${hexBytes(resp)}`, vin !== null);
+    });
+  });
+
+  dtcBtn.addEventListener('click', () => {
+    dtcBtn.disabled = true;
+    showOut(dtcOut, '…', true);
+    void safeRequest([0x03]).then((resp) => {
+      dtcBtn.disabled = false;
+      if (!alive) return;
+      if (!resp) return showOut(dtcOut, 'no response', false);
+      if (resp[0] !== 0x43) return showOut(dtcOut, `unexpected: ${hexBytes(resp)}`, false);
+      const count = resp[1] ?? 0;
+      const body = resp.slice(2, 2 + 2 * count);
+      if (body.length !== 2 * count) return showOut(dtcOut, `cut off: ${hexBytes(resp)}`, false);
+      const codes = decodeDtcList(body);
+      showOut(dtcOut, codes.length > 0 ? codes.join(', ') : 'no codes', true);
+    });
+  });
 
   manual.addEventListener('submit', (e) => {
     e.preventDefault();

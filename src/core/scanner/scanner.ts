@@ -8,6 +8,8 @@ import type { Bytes } from '../can/frame';
 import { DEFAULT_TIMEOUT_MS, type RequestOptions, type Transport } from '../../transport/transport';
 import { isNegativeResponse, isResponseTo } from '../obd/match';
 import { parseSupported, getPid } from '../obd/pids';
+import { decodeDtcList } from '../obd/dtc';
+import { decodeVinResponse } from '../obd/vin';
 
 export interface PidReading {
     pid: number;
@@ -96,6 +98,26 @@ export class Scanner {
             if (!pids.includes(base + 0x20)) break; // last bit not set — there's nothing further
         }
         return result.sort((a, b) => a - b);
+    }
+
+    /** Mode 09 PID 02. The response is 20 bytes, so it arrives over ISO-TP. */
+    async readVin(): Promise<string | null> {
+        const resp = await this.request([0x09, 0x02]);
+        return resp ? decodeVinResponse(resp) : null;
+    }
+
+    /**
+     * Mode 03 (stored codes) or 07 (pending codes).
+     * @returns ['P0300', …], [] if there are none, null if the ECU didn't answer
+     */
+    async readDtcs(mode: 0x03 | 0x07 = 0x03): Promise<string[] | null> {
+        const resp = await this.request([mode]);
+        if (!resp || isNegativeResponse(resp)) return null;
+        // 43 N a1 b1 a2 b2 …: on CAN the second byte is the number of codes.
+        const count = resp[1] ?? 0;
+        const body = resp.slice(2, 2 + 2 * count);
+        if (body.length !== 2 * count) return null; // cut-off response
+        return decodeDtcList(body);
     }
 
     /** Takes requests from the queue one by one until it's empty. */

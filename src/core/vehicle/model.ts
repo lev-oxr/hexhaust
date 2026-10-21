@@ -15,6 +15,9 @@ export interface VehicleState {
     timingAdvanceDeg: number; // ignition timing advance, °
     runTimeS: number; // s since engine start
     moduleVoltageV: number; // control module supply voltage, V
+    vin: string; // 17 characters, mode 09 PID 02
+    storedDtcs: string[]; // confirmed trouble codes, mode 03
+    pendingDtcs: string[]; // pending trouble codes, mode 07
 }
 
 /** Engine partly warmed up, car doing 60 km/h. The numbers match the examples in the plan. */
@@ -34,5 +37,9 @@ export function createStubState(): VehicleState {
         timingAdvanceDeg: 12,
         runTimeS: 420,
         moduleVoltageV: 14.1,
+        vin: '1G1JC5444R7252367', // a textbook example VIN with a valid check digit
+        // Three codes = 2 + 3 × 2 = 8 bytes in the response: one more than a Single Frame holds.
+        storedDtcs: ['P0300', 'P0420', 'P0171'],
+        pendingDtcs: [],
     };
 }

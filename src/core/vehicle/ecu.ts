@@ -7,10 +7,14 @@
 import type { CanBus } from '../can/bus';
 import type { Clock, TimerHandle } from '../clock';
 import { OBD_ID, type Bytes } from '../can/frame';
-import { decodeSingleFrame, encodeSingleFrame, SF_MAX_PAYLOAD } from '../isotp/single-frame';
+import { decodeSingleFrame } from '../isotp/single-frame';
 import { NEGATIVE_RESPONSE, NRC } from '../obd/match';
 import { supportedMask, getPid } from '../obd/pids';
 import type { VehicleState } from './model';
+import { encodeVin } from '../obd/vin';
+import { encodeDtc } from '../obd/dtc';
+import { sendIsoTp } from '../isotp/sender';
+
 
 // ─── What the ECU knows and where it gets it ─────────────────────────────────
 
@@ -60,11 +64,14 @@ export function respond(req: Bytes, state: VehicleState, physical: boolean): Byt
     switch (service) {
         case 0x01:
             return respondMode01(req, state);
-        // 03, 04, 07 — trouble codes (stage 6), 09 — VIN over several frames (stage 5).
+        case 0x03:
+            return respondDtcs(0x43, state.storedDtcs);
+        case 0x07:
+            return respondDtcs(0x47, state.pendingDtcs);
+        case 0x09:
+            return respondMode09(req, state);
+        // 04 — clearing codes changes the state, so it comes with the car model in stage 6.
         default:
-            // Unknown service. Stay silent on a broadcast request: otherwise every module in the car
-            // that doesn't know this service would flood the bus with refusals.
-            // On a physical request, refuse politely: 7F <service> 11 = "service not supported".
             return physical ? [NEGATIVE_RESPONSE, service, NRC.SERVICE_NOT_SUPPORTED] : null;
     }
 }
@@ -86,6 +93,28 @@ function respondMode01(req: Bytes, state: VehicleState): Bytes | null {
     if (!source || !def) return null; // unsupported PID — stay silent, that's normal for OBD
 
     return [0x41, pid, ...def.encode(source(state))];
+}
+
+/**
+ * Modes 03 and 07: trouble codes. On CAN the response is
+ *   43 N  a1 b1  a2 b2 …     N = how many codes, then 2 bytes per code.
+ * No codes → 43 00. The ECU answers even a broadcast request: "no codes" is an answer too.
+ * Three codes are already 8 bytes, so the response goes over ISO-TP.
+ */
+function respondDtcs(sid: number, codes: readonly string[]): Bytes {
+    return [sid, codes.length, ...codes.flatMap((c) => encodeDtc(c))];
+}
+
+/** Mode 09 PIDs this ECU knows. */
+const MODE09_PIDS = [0x02];
+
+/** Mode 09: vehicle information. 09 00 = which PIDs, 09 02 = VIN. */
+function respondMode09(req: Bytes, state: VehicleState): Bytes | null {
+    if (req.length !== 2) return null;
+    const pid = req[1];
+    if (pid === 0x00) return [0x49, 0x00, ...supportedMask(0x00, MODE09_PIDS)];
+    if (pid === 0x02) return [0x49, 0x02, 0x01, ...encodeVin(state.vin)]; // 01 = one data item
+    return null;
 }
 
 /**
@@ -111,6 +140,7 @@ export interface EcuOptions {
     requestId?: number;
     /** The response always comes from the request ID + 8. */
     responseId?: number;
+    flowControlTimeoutMs?: number;
 }
 
 /**
@@ -128,25 +158,34 @@ export function attachEcu(
     const requestId = options.requestId ?? OBD_ID.ECU_REQUEST;
     const responseId = options.responseId ?? requestId + 8;
     const timers = new Set<TimerHandle>();
+    const transfers = new Set<{ cancel: () => void }>(); // long responses still being sent
 
     const unsubscribe = bus.subscribe((frame) => {
         if (frame.from !== 'tester') return; // don't listen to our own responses
         const physical = frame.id === requestId;
         if (!physical && frame.id !== OBD_ID.FUNCTIONAL) return; // the frame isn't for us
 
+        // OBD requests always fit in a Single Frame. Flow Control frames for our long
+        // responses also arrive here; sendIsoTp() handles those, so we skip them.
         const req = decodeSingleFrame(frame.data);
-        if (!req) return; // not a Single Frame — we don't understand it until stage 5
+        if (!req) return;
 
         const resp = respond(req, getState(), physical);
         if (!resp) return;
-        if (resp.length > SF_MAX_PAYLOAD) {
-            console.warn('ECU: відповідь довша за 7 байтів, потрібен ISO-TP (етап 5)', resp);
-            return;
-        }
 
         const handle = clock.setTimeout(() => {
             timers.delete(handle);
-            bus.send({ id: responseId, data: encodeSingleFrame(resp), from: 'ecu' });
+            // Up to 7 bytes goes out as one Single Frame at once; longer: FF, then CFs after the tester's FC.
+            // The transfer goes into the set first: a Single Frame ends inside sendIsoTp() and removes itself.
+            const transfer = { cancel: () => { } };
+            transfers.add(transfer);
+            transfer.cancel = sendIsoTp(bus, clock, resp, {
+                txId: responseId,
+                rxId: requestId, // the tester sends Flow Control to our physical address
+                from: 'ecu',
+                fcTimeoutMs: options.flowControlTimeoutMs,
+                onEnd: () => transfers.delete(transfer),
+            });
         }, delay);
         timers.add(handle);
     });
@@ -155,5 +194,7 @@ export function attachEcu(
         unsubscribe();
         for (const handle of timers) clock.clearTimeout(handle); // a detached module doesn't answer
         timers.clear();
+        for (const t of [...transfers]) t.cancel(); // …and stops a long response halfway
+        transfers.clear();
     };
 }

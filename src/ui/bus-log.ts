@@ -3,6 +3,15 @@ import type { CanFrame } from '../core/can/frame';
 import { explainFrame, type FrameExplanation, type Vocab } from '../core/obd/explain';
 import { el } from './dom';
 import { formatTime, hex2, hexId } from './format';
+import { MessageTracker, type MessageInfo } from '../core/obd/message-tracker';
+
+export interface LogEntry {
+  seq: number;
+  frame: CanFrame;
+  ex: FrameExplanation;
+  /** Only for frames of a long message (First / Consecutive Frame) */
+  message?: MessageInfo;
+}
 
 export const MAX_ROWS = 400;
 
@@ -58,6 +67,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
   list.append(empty);
 
   const entries = new Map<number, LogEntry>();
+  const tracker = new MessageTracker(opts.vocab);
   let seq = 0;
   let total = 0;
   let selected: HTMLElement | null = null;
@@ -134,6 +144,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
     if (empty.isConnected) empty.remove();
     const stick = follow.checked;
     const entry: LogEntry = { seq: seq++, frame, ex: explainFrame(frame, opts.vocab) };
+    entry.message = tracker.annotate(frame, entry.ex);
     entries.set(entry.seq, entry);
     list.append(buildRow(entry));
     total++;
@@ -150,6 +161,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
   function clear(): void {
     list.replaceChildren(empty);
     entries.clear();
+    tracker.reset();
     selected = null;
     total = 0;
     follow.checked = true;

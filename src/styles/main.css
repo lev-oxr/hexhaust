@@ -307,6 +307,35 @@ input {
   text-align: right;
 }
 
+.vehicle {
+  padding: 10px 12px 0;
+  border-top: 1px solid var(--border);
+}
+.sub-title {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.vehicle-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.vehicle-line .btn {
+  flex: none;
+  min-width: 7.5em;
+}
+.vehicle-out {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 0.85rem var(--mono);
+}
+.vehicle-out.is-error {
+  color: var(--r-error);
+}
+
 .manual {
   padding: 10px 12px 12px;
 }

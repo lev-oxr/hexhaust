@@ -370,7 +370,22 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
       const code = val(pIdx);
       put(pIdx, 'pid', 'PID', `PID ${h2(code)}: ${pidName(code, undefined, 0x09)}.`);
       const body = rest.slice(1);
-      if (MODE9_ASCII.has(code)) {
+      if (code === 0x00) {
+        body.slice(0, 4).forEach((i, k) => {
+          const letter = LETTERS[k] ?? '?';
+          put(i, 'data', letter, `Bits ${letter}: mode 09 PIDs ${h2(8 * k + 1)}-${h2(8 * k + 8)}. Each bit is one PID, the most significant bit is the lowest PID.`);
+        });
+        for (const i of body.slice(4)) put(i, 'data', 'data', 'Extra data.');
+        if (single && body.length >= 4 && vocab.decodeSupportedPids) {
+          const vals = body.slice(0, 4).map(val);
+          const list = vocab.decodeSupportedPids(0x00, vals);
+          out.calc = {
+            formula: 'bit = 1 -> mode 09 PID is supported',
+            substituted: vals.map(bin8).join(' '),
+            result: list.length > 0 ? list.map((p) => `${h2(p)} ${MODE9_PIDS[p] ?? ''}`.trim()).join(', ') : 'no PIDs',
+          };
+        }
+      } else if (MODE9_ASCII.has(code)) {
         body.forEach((i, k) => {
           if (k === 0) {
             put(i, 'data', 'N', `Number of data items: ${val(i)}. For a VIN this is 1.`);
@@ -391,4 +406,29 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
     out.summary = `response of mode ${h2(mode)}`;
     return out;
   }
+}
+
+/**
+ * One line about a whole message, once ISO-TP has glued its frames together.
+ * 49 02 01 '1G1…'   -> 'VIN 1G1JC5444R7252367'
+ * 43 03 03 00 …     -> '3 stored trouble code(s): P0300, P0420, P0171'
+ */
+export function summarizeMessage(payload: Bytes, vocab: Vocab): string {
+  const [sid = 0, second = 0] = payload;
+  if (sid === 0x49 && (second === 0x02 || second === 0x04 || second === 0x0a)) {
+    const text = String.fromCharCode(...payload.slice(3).filter((c) => c >= 0x20 && c < 0x7f));
+    const what = second === 0x02 ? 'VIN' : (MODE9_PIDS[second] ?? 'text');
+    return `${what} ${text}`;
+  }
+  if (sid === 0x43 || sid === 0x47 || sid === 0x4a) {
+    const codes: string[] = [];
+    for (let i = 2; i + 1 < payload.length && codes.length < second; i += 2) {
+      const a = payload[i] ?? 0;
+      const b = payload[i + 1] ?? 0;
+      codes.push(vocab.decodeDtc ? vocab.decodeDtc(a, b) : `${h2(a)} ${h2(b)}`);
+    }
+    const kind = sid === 0x43 ? 'stored' : sid === 0x47 ? 'pending' : 'permanent';
+    return `${second} ${kind} trouble code(s): ${codes.join(', ')}`;
+  }
+  return `${payload.length} bytes: ${payload.slice(0, 8).map(h2).join(' ')}${payload.length > 8 ? ' …' : ''}`;
 }

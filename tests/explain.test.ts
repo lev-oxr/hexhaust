@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeId, directionOf, explainFrame, formatValue, type Vocab } from '../src/core/obd/explain';
+import { describeId, directionOf, explainFrame, formatValue, summarizeMessage, type Vocab } from '../src/core/obd/explain';
 import { decodeSupportedPids, getPid } from './helpers/fake-vocab';
 
 const vocab: Vocab = {
@@ -219,5 +219,28 @@ describe('formatValue', () => {
     [-40, '-40'],
   ])('%s -> %s', (n, s) => {
     expect(formatValue(n)).toBe(s);
+  });
+});
+
+describe('stage 5: whole messages and mode 09 masks', () => {
+  const ascii = (t: string): number[] => [...t].map((c) => c.charCodeAt(0));
+
+  it('summarizeMessage: VIN', () => {
+    expect(summarizeMessage([0x49, 0x02, 0x01, ...ascii('1G1JC5444R7252367')], vocab)).toBe('VIN 1G1JC5444R7252367');
+  });
+
+  it('summarizeMessage: trouble codes', () => {
+    expect(summarizeMessage([0x43, 0x03, 0x03, 0x00, 0x04, 0x20, 0x01, 0x71], vocab)).toBe('3 stored trouble code(s): P0300, P0420, P0171');
+  });
+
+  it('summarizeMessage: anything else is shown as bytes', () => {
+    expect(summarizeMessage([0x41, 0x0c, 0x1a, 0xf8], vocab)).toBe('4 bytes: 41 0C 1A F8');
+  });
+
+  it('49 00: the mode 09 support mask is explained bit by bit', () => {
+    const ex = explainFrame({ id: 0x7e8, data: [0x06, 0x49, 0x00, 0x40, 0x00, 0x00, 0x00, 0x55] }, vocab);
+    expect(ex.bytes.map((b) => b.short)).toEqual(['PCI', 'mode', 'PID', 'A', 'B', 'C', 'D', '-']);
+    expect(ex.calc?.substituted).toBe('01000000 00000000 00000000 00000000');
+    expect(ex.calc?.result).toContain('02 VIN');
   });
 });

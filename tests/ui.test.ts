@@ -34,12 +34,16 @@ function makeBus() {
 const RPM: CanFrame = { id: 0x7e8, data: [0x04, 0x41, 0x0c, 0x1a, 0xf8, 0x55, 0x55, 0x55], t: 24.9, from: 'ecu' };
 const REQ: CanFrame = { id: 0x7df, data: [0x02, 0x01, 0x0c, 0x55, 0x55, 0x55, 0x55, 0x55], t: 19.4, from: 'tester' };
 
+const VIN = '1G1JC5444R7252367';
+
 // The ECU supports PIDs 04, 05, 0C, 0D (the 01 00 mask also points to 01 20, which is empty)
 const fakeRequest = vi.fn(async (p: Bytes): Promise<Bytes | null> => {
   if (p[0] === 0x01 && p[1] === 0x00) return [0x41, 0x00, 0x18, 0x18, 0x00, 0x01];
   if (p[0] === 0x01 && p[1] === 0x20) return [0x41, 0x20, 0x00, 0x00, 0x00, 0x00];
   if (p[0] === 0x01 && p[1] === 0x0c) return [0x41, 0x0c, 0x1a, 0xf8];
   if (p[0] === 0x01 && p[1] === 0x0d) return [0x41, 0x0d, 0x3c];
+  if (p[0] === 0x09 && p[1] === 0x02) return [0x49, 0x02, 0x01, ...[...VIN].map((c) => c.charCodeAt(0))];
+  if (p[0] === 0x03) return [0x43, 0x03, 0x03, 0x00, 0x04, 0x20, 0x01, 0x71];
   return null;
 });
 
@@ -125,6 +129,51 @@ describe('scanner', () => {
     input.value = '01 0D';
     form.dispatchEvent(new Event('submit', { cancelable: true }));
     await vi.waitFor(() => expect(out.textContent).toBe('Response: 41 0D 3C'));
+  });
+});
+
+describe('long responses (stage 5)', () => {
+  it('"Read VIN" sends 09 02 and shows the VIN', async () => {
+    const [vinBtn] = root.querySelectorAll<HTMLButtonElement>('.vehicle .btn');
+    vinBtn?.click();
+    expect(fakeRequest).toHaveBeenCalledWith([0x09, 0x02]);
+    await vi.waitFor(() => expect(root.querySelectorAll('.vehicle-out')[0]?.textContent).toBe(VIN));
+  });
+
+  it('"Read codes" sends 03 and lists the codes', async () => {
+    const [, dtcBtn] = root.querySelectorAll<HTMLButtonElement>('.vehicle .btn');
+    dtcBtn?.click();
+    expect(fakeRequest).toHaveBeenCalledWith([0x03]);
+    await vi.waitFor(() => expect(root.querySelectorAll('.vehicle-out')[1]?.textContent).toBe('P0300, P0420, P0171'));
+  });
+
+  it('the log glues FF + CF + CF together: the last row says what the message was', () => {
+    const vinFrames = [
+      [0x10, 0x14, 0x49, 0x02, 0x01, 0x31, 0x47, 0x31],
+      [0x30, 0x00, 0x00, 0x55, 0x55, 0x55, 0x55, 0x55],
+      [0x21, 0x4a, 0x43, 0x35, 0x34, 0x34, 0x34, 0x52],
+      [0x22, 0x37, 0x32, 0x35, 0x32, 0x33, 0x36, 0x37],
+    ];
+    vinFrames.forEach((data, i) => {
+      const fc = data[0] === 0x30;
+      bus.emit({ id: fc ? 0x7e0 : 0x7e8, data, t: i, from: fc ? 'tester' : 'ecu' });
+    });
+    const desc = [...root.querySelectorAll('.log-row .c-desc')].map((n) => n.textContent);
+    expect(desc[0]).toContain('First Frame · 20 bytes');
+    expect(desc[1]).toContain('Flow Control');
+    expect(desc[3]).toContain(`complete: VIN ${VIN}`);
+
+    (root.querySelectorAll('.log-row')[3] as HTMLElement).click();
+    const rows = [...root.querySelectorAll('.inspector .msg .calc-v')].map((n) => n.textContent);
+    expect(rows).toEqual(['message bytes 14-20', '20 of 20 bytes, complete', expect.stringMatching(/^49 02 01 31 47 31/), `VIN ${VIN}`]);
+    const shorts = [...root.querySelectorAll('.inspector .strip-short')].map((n) => n.textContent);
+    expect(shorts).toEqual(['PCI', '7', '2', '5', '2', '3', '6', '7']); // the last 7 VIN characters
+  });
+
+  it('a skipped CF is marked as broken', () => {
+    bus.emit({ id: 0x7e8, data: [0x10, 0x14, 0x49, 0x02, 0x01, 0x31, 0x47, 0x31], t: 0, from: 'ecu' });
+    bus.emit({ id: 0x7e8, data: [0x22, 0x37, 0x32, 0x35, 0x32, 0x33, 0x36, 0x37], t: 1, from: 'ecu' });
+    expect(root.querySelectorAll('.log-row .c-desc')[1]?.textContent).toContain('broken: wrong sequence number');
   });
 });
 
