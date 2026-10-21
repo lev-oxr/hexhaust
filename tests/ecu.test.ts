@@ -113,8 +113,9 @@ describe('ECU: modes 03, 07, 09 (stage 5)', () => {
         expect(respond([0x09, 0x0a], state, true)).toBeNull();
     });
 
-    it('04 is still unknown until stage 6', () => {
-        expect(respond([0x04], state, true)).toEqual([0x7f, 0x04, 0x11]);
+    it('04 (stage 6): refused while the engine runs, 44 with the engine stopped', () => {
+        expect(respond([0x04], state, true)).toEqual([0x7f, 0x04, 0x22]);
+        expect(respond([0x04], { ...state, rpm: 0 }, true)).toEqual([0x44]);
     });
 
     it.each([[[0x03]], [[0x07]], [[0x09, 0x00]], [[0x09, 0x02]]])('%j: the response passes isResponseTo', (req) => {

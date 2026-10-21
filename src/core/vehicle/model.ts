@@ -18,6 +18,10 @@ export interface VehicleState {
     vin: string; // 17 characters, mode 09 PID 02
     storedDtcs: string[]; // confirmed trouble codes, mode 03
     pendingDtcs: string[]; // pending trouble codes, mode 07
+    gear: number; // 1–5, for the dashboard
+    stftPct: number; // short term fuel trim, % (PID 06)
+    ltftPct: number; // long term fuel trim, % (PID 07)
+    milOn: boolean; // malfunction indicator lamp ("check engine"), bit 7 of PID 01 byte A
 }
 
 /** Engine partly warmed up, car doing 60 km/h. The numbers match the examples in the plan. */
@@ -41,5 +45,9 @@ export function createStubState(): VehicleState {
         // Three codes = 2 + 3 × 2 = 8 bytes in the response: one more than a Single Frame holds.
         storedDtcs: ['P0300', 'P0420', 'P0171'],
         pendingDtcs: [],
+        gear: 5,
+        stftPct: 0,
+        ltftPct: 0,
+        milOn: true, // three stored codes → the lamp is on
     };
 }

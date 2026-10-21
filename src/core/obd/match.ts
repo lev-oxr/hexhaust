@@ -12,6 +12,8 @@ export const NRC = {
     SERVICE_NOT_SUPPORTED: 0x11,
     /** "Wait, still working on it." We'll handle it together with the slow ECU in stage 6. */
     RESPONSE_PENDING: 0x78,
+    /** "Not now." Mode 04 with the engine running gets this. */
+    CONDITIONS_NOT_CORRECT: 0x22,
 } as const;
 
 /** Services where the second response byte echoes the PID from the request. */

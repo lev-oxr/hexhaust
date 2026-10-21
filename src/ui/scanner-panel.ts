@@ -123,7 +123,12 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   dtcBtn.type = 'button';
   dtcBtn.title = 'Request 03: stored trouble codes. Three or more codes take several frames';
   const dtcOut = el('output', 'vehicle-out', '-');
-  for (const [btn, out] of [[vinBtn, vinOut], [dtcBtn, dtcOut]] as const) {
+  // mode 04, clear trouble codes
+  const clearBtn = el('button', 'btn', 'Clear codes (04)');
+  clearBtn.type = 'button';
+  clearBtn.title = 'Request 04: forget stored and pending codes and turn the MIL off. The ECU refuses while the engine runs';
+  const clearOut = el('output', 'vehicle-out', '-');
+  for (const [btn, out] of [[vinBtn, vinOut], [dtcBtn, dtcOut], [clearBtn, clearOut]] as const) {
     out.setAttribute('role', 'status');
     const line = el('div', 'vehicle-line');
     line.append(btn, out);
@@ -299,6 +304,25 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
       if (body.length !== 2 * count) return showOut(dtcOut, `cut off: ${hexBytes(resp)}`, false);
       const codes = decodeDtcList(body);
       showOut(dtcOut, codes.length > 0 ? codes.join(', ') : 'no codes', true);
+    });
+  });
+
+clearBtn.addEventListener('click', () => {
+    clearBtn.disabled = true;
+    showOut(clearOut, '…', true);
+    void safeRequest([0x04]).then((resp) => {
+      clearBtn.disabled = false;
+      if (!alive) return;
+      if (!resp) return showOut(clearOut, 'no response', false);
+      if (resp[0] === 0x44) {
+        showOut(clearOut, 'cleared (44)', true);
+        showOut(dtcOut, '-', true); // the codes shown above are gone now: read them again
+        return;
+      }
+      if (resp[0] === 0x7f && resp[2] === 0x22) {
+        return showOut(clearOut, `refused: ${hexBytes(resp)}, stop the engine first`, false);
+      }
+      showOut(clearOut, `unexpected: ${hexBytes(resp)}`, false);
     });
   });
 

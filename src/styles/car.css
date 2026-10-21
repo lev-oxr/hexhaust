@@ -1,0 +1,338 @@
+/* Stage 6: car panel, gauges, faults, "Clear codes" and late frames in the log.
+   Uses the tokens from main.css (--surface, --accent, --r-error, …) and adds three of its own. */
+:root {
+  --mil: #c2410c;
+  --warn: #a16207;
+  --gauge-face: #f8f6f1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --mil: #fb923c;
+    --warn: #facc15;
+    --gauge-face: #181612;
+  }
+}
+:root[data-theme='dark'] {
+  --mil: #fb923c;
+  --warn: #facc15;
+  --gauge-face: #181612;
+}
+
+.car-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+/* MIL lamp in the panel header */
+.mil {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 700 0.7rem/1.4 var(--mono);
+  letter-spacing: 0.04em;
+  opacity: 0.45;
+}
+.mil.is-on {
+  border-color: var(--mil);
+  background: var(--mil);
+  color: var(--accent-ink);
+  opacity: 1;
+}
+
+/* Segmented switches (key, ECU timing) built from radio buttons */
+.seg {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.seg-legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.seg-box {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg-item {
+  flex: 1;
+  position: relative;
+  cursor: pointer;
+}
+.seg-item + .seg-item {
+  border-left: 1px solid var(--border);
+}
+.seg-item input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.seg-item span {
+  display: block;
+  padding: 6px 8px;
+  text-align: center;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.seg-item input:checked + span {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.seg-item input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+/* Gauges */
+.gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--gauge-face);
+}
+.gauge-svg {
+  width: 100%;
+  max-width: 180px;
+  height: auto;
+}
+.gauge-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.g-track,
+.g-red {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.g-track {
+  stroke: var(--border);
+}
+.g-red {
+  stroke: var(--r-error);
+}
+.g-tick {
+  stroke: var(--muted);
+  stroke-width: 1.2;
+}
+.g-num {
+  fill: var(--muted);
+  font: 7px var(--mono);
+  text-anchor: middle;
+}
+.g-needle {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.g-hub {
+  fill: var(--text);
+}
+.g-value {
+  fill: var(--text);
+  font: 700 14px var(--mono);
+  text-anchor: middle;
+}
+.g-unit {
+  fill: var(--muted);
+  font: 7px var(--sans);
+  text-anchor: middle;
+}
+.gauge.is-dead .g-needle,
+.gauge.is-dead .g-value {
+  opacity: 0.3;
+}
+
+.readouts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+.readout {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.readout-k {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.readout-v {
+  margin: 0;
+  font: 600 0.95rem var(--mono);
+}
+.readout-v.is-off {
+  color: var(--muted);
+}
+
+/* Pedals */
+.pedals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.pedal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+.pedal-head {
+  display: flex;
+  justify-content: space-between;
+}
+.pedal-value {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.pedal-range {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.brake {
+  min-width: 88px;
+  min-height: 40px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.brake.is-on {
+  background: var(--r-error);
+  border-color: var(--r-error);
+  color: #fff;
+}
+
+/* Faults */
+.faults {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.sub-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.fault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fault {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+.fault-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.fault-dtc {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.fault-hint {
+  grid-column: 1 / -1;
+  margin: 0 0 0 24px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.chip {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.chip-detecting {
+  border-style: dashed;
+  color: var(--text);
+}
+.chip-pending {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.chip-stored,
+.chip-stored-pending {
+  border-color: var(--r-error);
+  color: var(--r-error);
+  font-weight: 600;
+}
+.car-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Scanner: clear codes */
+.clear-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 0;
+  font-size: 0.85rem;
+}
+.clear-row .btn {
+  white-space: nowrap;
+}
+.clear-out {
+  color: var(--muted);
+}
+.clear-out.is-error {
+  color: var(--r-error);
+}
+
+/* Bus log: a response that came after the scanner stopped waiting */
+.log-row.is-late {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.log-row.is-late .c-desc {
+  color: var(--warn);
+}
+
+@media (max-width: 640px) {
+  .readouts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .seg-item span {
+    padding: 6px 4px;
+    font-size: 0.8rem;
+  }
+  .fault {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fault .chip {
+    justify-self: start;
+    margin-left: 24px;
+  }
+}

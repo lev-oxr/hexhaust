@@ -14,6 +14,7 @@ import type { VehicleState } from './model';
 import { encodeVin } from '../obd/vin';
 import { encodeDtc } from '../obd/dtc';
 import { sendIsoTp } from '../isotp/sender';
+import { encodeMonitorStatus, MONITOR_STATUS_PID } from '../obd/monitor-status';
 
 
 // ─── What the ECU knows and where it gets it ─────────────────────────────────
@@ -34,16 +35,20 @@ const SOURCES: Record<number, (s: VehicleState) => number> = {
     0x33: (s) => s.baroKpa,
     0x42: (s) => s.moduleVoltageV,
     0x46: (s) => s.ambientC,
+    0x06: (s) => s.stftPct, // fuel trims react to the "vacuum leak" fault
+    0x07: (s) => s.ltftPct,
 };
 
 /**
  * PIDs the ECU actually supports: there is both a source in the state and a definition in pids.ts.
  * If your PID table lacks, say, 0x0E, the ECU honestly doesn't support it.
  */
-export const SUPPORTED_PIDS: readonly number[] = Object.keys(SOURCES)
-    .map(Number)
-    .filter((pid) => getPid(pid) !== undefined)
-    .sort((a, b) => a - b);
+export const SUPPORTED_PIDS: readonly number[] = [
+    MONITOR_STATUS_PID, // 01 01 is built by hand below: it is not a "number with units"
+    ...Object.keys(SOURCES)
+        .map(Number)
+        .filter((pid) => getPid(pid) !== undefined),
+].sort((a, b) => a - b);
 
 /** 0x00, 0x20, 0x40 … 0xE0 — "which PIDs do you support?" */
 export function isSupportQuery(pid: number): boolean {
@@ -66,6 +71,8 @@ export function respond(req: Bytes, state: VehicleState, physical: boolean): Byt
             return respondMode01(req, state);
         case 0x03:
             return respondDtcs(0x43, state.storedDtcs);
+        case 0x04:
+            return respondMode04(state);
         case 0x07:
             return respondDtcs(0x47, state.pendingDtcs);
         case 0x09:
@@ -88,11 +95,24 @@ function respondMode01(req: Bytes, state: VehicleState): Bytes | null {
         return mask ? [0x41, pid, ...mask] : null;
     }
 
+    if (pid === MONITOR_STATUS_PID) {
+        return [0x41, pid, ...encodeMonitorStatus(state.milOn, state.storedDtcs.length)];
+    }
+
     const source = SOURCES[pid];
     const def = getPid(pid);
     if (!source || !def) return null; // unsupported PID — stay silent, that's normal for OBD
 
     return [0x41, pid, ...def.encode(source(state))];
+}
+
+/**
+ * Mode 04: clear codes. Real ECUs refuse while the engine is running: clearing would also reset
+ * the readiness monitors in the middle of a drive. 44 means "done"; the caller does the clearing.
+ */
+function respondMode04(state: VehicleState): Bytes {
+    if (state.rpm > 0) return [NEGATIVE_RESPONSE, 0x04, NRC.CONDITIONS_NOT_CORRECT];
+    return [0x44];
 }
 
 /**
@@ -141,6 +161,8 @@ export interface EcuOptions {
     /** The response always comes from the request ID + 8. */
     responseId?: number;
     flowControlTimeoutMs?: number;
+    /** called when the ECU accepted mode 04 (answered 44). respond() stays pure; the car forgets its codes here. */
+    onClearDtcs?: () => void;
 }
 
 /**
@@ -172,6 +194,8 @@ export function attachEcu(
 
         const resp = respond(req, getState(), physical);
         if (!resp) return;
+
+        if (resp[0] === 0x44) options.onClearDtcs?.(); // mode 04 accepted
 
         const handle = clock.setTimeout(() => {
             timers.delete(handle);

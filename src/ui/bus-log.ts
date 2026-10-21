@@ -4,6 +4,7 @@ import { explainFrame, type FrameExplanation, type Vocab } from '../core/obd/exp
 import { el } from './dom';
 import { formatTime, hex2, hexId } from './format';
 import { MessageTracker, type MessageInfo } from '../core/obd/message-tracker';
+import { createLatenessTracker, markLate } from '../core/obd/lateness';
 
 export interface LogEntry {
   seq: number;
@@ -19,6 +20,7 @@ export interface LogEntry {
   seq: number;
   frame: CanFrame;
   ex: FrameExplanation;
+  late?: boolean;
 }
 
 export interface BusLogOptions {
@@ -71,6 +73,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
   let seq = 0;
   let total = 0;
   let selected: HTMLElement | null = null;
+  const lateness = createLatenessTracker();
 
   const updateCounter = (): void => {
     counter.textContent = total > MAX_ROWS ? `${total} frames, showing the last ${MAX_ROWS}` : `${total} frames`;
@@ -94,7 +97,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
 
   function buildRow(entry: LogEntry): HTMLElement {
     const { frame, ex } = entry;
-    const row = el('div', 'log-row');
+    const row = el('div', entry.late ? 'log-row is-late' : 'log-row');
     row.setAttribute('role', 'option');
     row.setAttribute('aria-selected', 'false');
     row.tabIndex = 0;
@@ -145,6 +148,11 @@ export function createBusLog(opts: BusLogOptions): BusLog {
     const stick = follow.checked;
     const entry: LogEntry = { seq: seq++, frame, ex: explainFrame(frame, opts.vocab) };
     entry.message = tracker.annotate(frame, entry.ex);
+    const late = lateness.check(frame);
+    if (late) {
+      markLate(entry.ex, late);
+      entry.late = true;
+    }
     entries.set(entry.seq, entry);
     list.append(buildRow(entry));
     total++;
