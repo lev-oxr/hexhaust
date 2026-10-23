@@ -16,7 +16,6 @@ import { encodeDtc } from '../obd/dtc';
 import { sendIsoTp } from '../isotp/sender';
 import { encodeMonitorStatus, MONITOR_STATUS_PID } from '../obd/monitor-status';
 
-
 // ─── What the ECU knows and where it gets it ─────────────────────────────────
 
 /** PID → which state field to report. Encoding formulas come from pids.ts; this only says where the number comes from. */
@@ -170,12 +169,7 @@ export interface EcuOptions {
  * so in stage 6 the RPM will be fresh without any changes here.
  * @returns a function that detaches the ECU from the bus
  */
-export function attachEcu(
-    bus: CanBus,
-    clock: Clock,
-    getState: () => VehicleState,
-    options: EcuOptions = {},
-): () => void {
+export function attachEcu(bus: CanBus, clock: Clock, getState: () => VehicleState, options: EcuOptions = {}): () => void {
     const delay = options.responseDelayMs ?? 5;
     const requestId = options.requestId ?? OBD_ID.ECU_REQUEST;
     const responseId = options.responseId ?? requestId + 8;
@@ -201,7 +195,7 @@ export function attachEcu(
             timers.delete(handle);
             // Up to 7 bytes goes out as one Single Frame at once; longer: FF, then CFs after the tester's FC.
             // The transfer goes into the set first: a Single Frame ends inside sendIsoTp() and removes itself.
-            const transfer = { cancel: () => { } };
+            const transfer = { cancel: () => {} };
             transfers.add(transfer);
             transfer.cancel = sendIsoTp(bus, clock, resp, {
                 txId: responseId,

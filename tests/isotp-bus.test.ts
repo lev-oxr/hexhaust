@@ -254,7 +254,7 @@ describe('sendIsoTp(): the sender follows Flow Control', () => {
         expect(cfs()).toHaveLength(0);
     });
 
-    it('an FC on someone else\'s ID does not count', async () => {
+    it("an FC on someone else's ID does not count", async () => {
         const ended = start(100);
         bus.send({ id: 0x7e1, data: [0x30, 0, 0], from: 'tester' });
         await vi.advanceTimersByTimeAsync(100);

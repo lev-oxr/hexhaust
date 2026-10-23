@@ -130,7 +130,9 @@ export class FakeCanable implements SerialLink {
         }
         if (cmd === 'V') {
             return this.reply(
-                v25 ? '+Board: Multiboard\tMCU: STM32G431\tDevID: 1128\tSlcan: 105\tClock: 160\tSerial: 206249E3946306550\r' : 'v1.0-abc123 https://github.com/normaldotcom/canable2-fw\r',
+                v25
+                    ? '+Board: Multiboard\tMCU: STM32G431\tDevID: 1128\tSlcan: 105\tClock: 160\tSerial: 206249E3946306550\r'
+                    : 'v1.0-abc123 https://github.com/normaldotcom/canable2-fw\r',
             );
         }
         if (cmd === 'O') {

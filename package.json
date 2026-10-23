@@ -1,19 +1,53 @@
 {
   "name": "hexhaust",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
     "jsdom": "^29.1.1",
+    "prettier": "^3.9.10",
     "typescript": "~6.0.2",
+    "typescript-eslint": "^8.72.0",
     "vite": "^8.3.0",
     "vitest": "^5.0.5"
-  }
+  },
+  "description": "Browser OBD-II sandbox: a simulated car and a scan tool talk over a virtual CAN bus, and every byte is explained.",
+  "homepage": "https://lev-oxr.github.io/hexhaust/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lev-oxr/hexhaust.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lev-oxr/hexhaust/issues"
+  },
+  "license": "MIT",
+  "author": "Oleksandr Levchenko",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "obd2",
+    "obd-ii",
+    "can-bus",
+    "iso-tp",
+    "web-serial",
+    "slcan",
+    "canable",
+    "automotive",
+    "diagnostics"
+  ]
 }

@@ -4,14 +4,14 @@ import { decodeDtc, decodeDtcList, encodeDtc, isEmptyDtc } from '../src/core/obd
 
 // [code, bytes]
 const EXAMPLES = [
-    ['P0300', '03 00'],   // random/multiple cylinder misfire
-    ['P0420', '04 20'],   // catalyst efficiency below threshold
-    ['P0A80', '0A 80'],   // digits after the first one can be A–F
+    ['P0300', '03 00'], // random/multiple cylinder misfire
+    ['P0420', '04 20'], // catalyst efficiency below threshold
+    ['P0A80', '0A 80'], // digits after the first one can be A–F
     ['P0001', '00 01'],
     ['C0035', '40 35'],
     ['B1234', '92 34'],
     ['U0100', 'C1 00'],
-    ['U3FFF', 'FF FF'],   // largest possible code
+    ['U3FFF', 'FF FF'], // largest possible code
 ] as const;
 
 describe('encodeDtc', () => {
@@ -24,12 +24,9 @@ describe('encodeDtc', () => {
         expect(encodeDtc('  P0300 ')).toEqual([0x03, 0x00]);
     });
 
-    test.each(['', 'X1234', 'P4000', 'P030', 'P03000', 'P03G0', 'P 0300'])(
-        'invalid code "%s" throws',
-        (code) => {
-            expect(() => encodeDtc(code)).toThrow();
-        },
-    );
+    test.each(['', 'X1234', 'P4000', 'P030', 'P03000', 'P03G0', 'P 0300'])('invalid code "%s" throws', (code) => {
+        expect(() => encodeDtc(code)).toThrow();
+    });
 });
 
 describe('decodeDtc', () => {

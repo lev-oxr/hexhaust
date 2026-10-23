@@ -49,7 +49,15 @@ export interface BusStatus {
 }
 
 const BUS_STATES: BusState[] = ['active', 'warning', 'passive', 'bus-off'];
-const PROTOCOL_ERRORS = [null, 'bit stuffing error', 'frame format error', 'no ACK received', 'recessive bit error', 'dominant bit error', 'CRC error'];
+const PROTOCOL_ERRORS = [
+    null,
+    'bit stuffing error',
+    'frame format error',
+    'no ACK received',
+    'recessive bit error',
+    'dominant bit error',
+    'CRC error',
+];
 const FLAGS: [number, string][] = [
     [0x01, 'Rx failed'],
     [0x02, 'Tx failed'],

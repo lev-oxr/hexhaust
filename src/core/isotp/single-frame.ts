@@ -17,7 +17,7 @@ export function encodeSingleFrame(payload: Bytes): Bytes {
     if (payload.length < 1 || payload.length > SF_MAX_PAYLOAD) {
         throw new RangeError(
             `Single Frame size is 1–${SF_MAX_PAYLOAD} bytes, the message sixe is ${payload.length}. ` +
-            'Larger messages it is ISO-TP with couple of frames.',
+                'Larger messages it is ISO-TP with couple of frames.',
         );
     }
     return [payload.length, ...payload];

@@ -72,7 +72,7 @@ export async function openWebSerial(port: WebSerialPort, baudRate = 115200): Pro
     // Read loop: runs until the port goes away or close() cancels the reader.
     void (async () => {
         try {
-            for (; ;) {
+            for (;;) {
                 const { value, done } = await reader.read();
                 if (done) break;
                 const text = decoder.decode(value, { stream: true });

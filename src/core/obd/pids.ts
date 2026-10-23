@@ -5,15 +5,15 @@ import { hex, isByte } from '../can/frame';
 import type { Bytes } from '../can/frame';
 
 export interface PidDef {
-    pid: number;                     // 0x0C
-    name: string;                    // 'Engine speed'
-    unit: string;                    // 'rpm'
-    length: 1 | 2 | 4;               // number of data bytes in the response
-    min: number;                     // smallest value that can be encoded
-    max: number;                     // largest value that can be encoded
-    formula: string;                 // '(256 × A + B) / 4', shown in the inspector
-    decode(data: Bytes): number;     // [0x1A, 0xF8] → 1726
-    encode(value: number): Bytes;    // 1726 → [0x1A, 0xF8], used by the ECU
+    pid: number; // 0x0C
+    name: string; // 'Engine speed'
+    unit: string; // 'rpm'
+    length: 1 | 2 | 4; // number of data bytes in the response
+    min: number; // smallest value that can be encoded
+    max: number; // largest value that can be encoded
+    formula: string; // '(256 × A + B) / 4', shown in the inspector
+    decode(data: Bytes): number; // [0x1A, 0xF8] → 1726
+    encode(value: number): Bytes; // 1726 → [0x1A, 0xF8], used by the ECU
 }
 
 // ─── Linear PIDs ──────────────────────────────────────────────────────
@@ -27,9 +27,9 @@ interface LinearSpec {
     unit: string;
     length: 1 | 2;
     formula: string;
-    mul?: number;      // defaults to 1
-    div?: number;      // defaults to 1
-    offset?: number;   // defaults to 0
+    mul?: number; // defaults to 1
+    div?: number; // defaults to 1
+    offset?: number; // defaults to 0
 }
 
 function linearPid(spec: LinearSpec): PidDef {
@@ -48,9 +48,7 @@ function linearPid(spec: LinearSpec): PidDef {
 
         decode(data) {
             if (data.length < length) {
-                throw new RangeError(
-                    `PID ${hex(pid)} expects ${length} data byte(s), got ${data.length}: [${hex(data)}]`,
-                );
+                throw new RangeError(`PID ${hex(pid)} expects ${length} data byte(s), got ${data.length}: [${hex(data)}]`);
             }
             const bytes = data.slice(0, length);
             if (!bytes.every(isByte)) {
@@ -80,64 +78,129 @@ function clamp(n: number, lo: number, hi: number): number {
 
 export const PID_LIST: readonly PidDef[] = [
     linearPid({
-        pid: 0x04, name: 'Calculated engine load', unit: '%', length: 1,
-        mul: 100, div: 255, formula: 'A × 100 / 255'
+        pid: 0x04,
+        name: 'Calculated engine load',
+        unit: '%',
+        length: 1,
+        mul: 100,
+        div: 255,
+        formula: 'A × 100 / 255',
     }),
     linearPid({
-        pid: 0x05, name: 'Engine coolant temperature', unit: '°C', length: 1,
-        offset: -40, formula: 'A − 40'
+        pid: 0x05,
+        name: 'Engine coolant temperature',
+        unit: '°C',
+        length: 1,
+        offset: -40,
+        formula: 'A − 40',
     }),
     linearPid({
-        pid: 0x06, name: 'Short term fuel trim, bank 1', unit: '%', length: 1,
-        mul: 100, div: 128, offset: -100, formula: '(A − 128) × 100 / 128'
+        pid: 0x06,
+        name: 'Short term fuel trim, bank 1',
+        unit: '%',
+        length: 1,
+        mul: 100,
+        div: 128,
+        offset: -100,
+        formula: '(A − 128) × 100 / 128',
     }),
     linearPid({
-        pid: 0x07, name: 'Long term fuel trim, bank 1', unit: '%', length: 1,
-        mul: 100, div: 128, offset: -100, formula: '(A − 128) × 100 / 128'
+        pid: 0x07,
+        name: 'Long term fuel trim, bank 1',
+        unit: '%',
+        length: 1,
+        mul: 100,
+        div: 128,
+        offset: -100,
+        formula: '(A − 128) × 100 / 128',
     }),
     linearPid({
-        pid: 0x0b, name: 'Intake manifold absolute pressure', unit: 'kPa', length: 1,
-        formula: 'A'
+        pid: 0x0b,
+        name: 'Intake manifold absolute pressure',
+        unit: 'kPa',
+        length: 1,
+        formula: 'A',
     }),
     linearPid({
-        pid: 0x0c, name: 'Engine speed', unit: 'rpm', length: 2,
-        div: 4, formula: '(256 × A + B) / 4'
+        pid: 0x0c,
+        name: 'Engine speed',
+        unit: 'rpm',
+        length: 2,
+        div: 4,
+        formula: '(256 × A + B) / 4',
     }),
     linearPid({
-        pid: 0x0d, name: 'Vehicle speed', unit: 'km/h', length: 1,
-        formula: 'A'
+        pid: 0x0d,
+        name: 'Vehicle speed',
+        unit: 'km/h',
+        length: 1,
+        formula: 'A',
     }),
     linearPid({
-        pid: 0x0e, name: 'Timing advance', unit: '° before TDC', length: 1,
-        div: 2, offset: -64, formula: 'A / 2 − 64'
+        pid: 0x0e,
+        name: 'Timing advance',
+        unit: '° before TDC',
+        length: 1,
+        div: 2,
+        offset: -64,
+        formula: 'A / 2 − 64',
     }),
     linearPid({
-        pid: 0x0f, name: 'Intake air temperature', unit: '°C', length: 1,
-        offset: -40, formula: 'A − 40'
+        pid: 0x0f,
+        name: 'Intake air temperature',
+        unit: '°C',
+        length: 1,
+        offset: -40,
+        formula: 'A − 40',
     }),
     linearPid({
-        pid: 0x10, name: 'Mass air flow rate', unit: 'g/s', length: 2,
-        div: 100, formula: '(256 × A + B) / 100'
+        pid: 0x10,
+        name: 'Mass air flow rate',
+        unit: 'g/s',
+        length: 2,
+        div: 100,
+        formula: '(256 × A + B) / 100',
     }),
     linearPid({
-        pid: 0x11, name: 'Throttle position', unit: '%', length: 1,
-        mul: 100, div: 255, formula: 'A × 100 / 255'
+        pid: 0x11,
+        name: 'Throttle position',
+        unit: '%',
+        length: 1,
+        mul: 100,
+        div: 255,
+        formula: 'A × 100 / 255',
     }),
     linearPid({
-        pid: 0x1f, name: 'Run time since engine start', unit: 's', length: 2,
-        formula: '256 × A + B'
+        pid: 0x1f,
+        name: 'Run time since engine start',
+        unit: 's',
+        length: 2,
+        formula: '256 × A + B',
     }),
     linearPid({
-        pid: 0x2f, name: 'Fuel tank level', unit: '%', length: 1,
-        mul: 100, div: 255, formula: 'A × 100 / 255'
+        pid: 0x2f,
+        name: 'Fuel tank level',
+        unit: '%',
+        length: 1,
+        mul: 100,
+        div: 255,
+        formula: 'A × 100 / 255',
     }),
     linearPid({
-        pid: 0x42, name: 'Control module voltage', unit: 'V', length: 2,
-        div: 1000, formula: '(256 × A + B) / 1000'
+        pid: 0x42,
+        name: 'Control module voltage',
+        unit: 'V',
+        length: 2,
+        div: 1000,
+        formula: '(256 × A + B) / 1000',
     }),
     linearPid({
-        pid: 0x46, name: 'Ambient air temperature', unit: '°C', length: 1,
-        offset: -40, formula: 'A − 40'
+        pid: 0x46,
+        name: 'Ambient air temperature',
+        unit: '°C',
+        length: 1,
+        offset: -40,
+        formula: 'A − 40',
     }),
 ];
 
@@ -176,13 +239,13 @@ export function supportedMask(base: number, pids: Iterable<number>): Bytes {
     for (const pid of pids) {
         let bit: number;
         if (pid > base && pid <= base + 0x20) {
-            bit = pid - base - 1;      // PID base+1 → bit 0, …, base+0x20 → bit 31
+            bit = pid - base - 1; // PID base+1 → bit 0, …, base+0x20 → bit 31
         } else if (pid > base + 0x20) {
-            bit = 31;                  // PID is further on → the next mask must be queried
+            bit = 31; // PID is further on → the next mask must be queried
         } else {
-            continue;                  // PID belongs to an earlier range
+            continue; // PID belongs to an earlier range
         }
-        mask[bit >> 3] |= 0x80 >> (bit & 7);   // byte index = bit / 8, bits within a byte count from the left
+        mask[bit >> 3] |= 0x80 >> (bit & 7); // byte index = bit / 8, bits within a byte count from the left
     }
     return mask;
 }

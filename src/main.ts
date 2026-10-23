@@ -17,8 +17,8 @@ const bus = new VirtualBus(clock);
 const car = new Car(clock, createStubState(), { ambientC: 18, key: 'ignition' });
 // The ECU's wire to the bus: dead with the key off, late with the "slow ECU" protocol fault
 const ecuLink = createEcuLink(bus, clock, {
-  powered: () => car.powered,
-  extraDelayMs: () => car.ecuExtraDelayMs,
+    powered: () => car.powered,
+    extraDelayMs: () => car.ecuExtraDelayMs,
 });
 attachEcu(ecuLink, clock, () => car.state, { onClearDtcs: () => car.clearDtcs() });
 car.start();
@@ -29,10 +29,10 @@ const source = new SourceSwitch({ clock, simBus: bus, simTransport: new SimTrans
 const scanner = new Scanner(source.transport);
 
 mountApp(document.querySelector<HTMLDivElement>('#app')!, {
-  bus: source.frames,
-  request: (payload) => scanner.request(payload),
-  car,
-  source,
-  serialSupported: isWebSerialSupported(),
-  openLink: async () => openWebSerial(await requestSerialPort()),
+    bus: source.frames,
+    request: (payload) => scanner.request(payload),
+    car,
+    source,
+    serialSupported: isWebSerialSupported(),
+    openLink: async () => openWebSerial(await requestSerialPort()),
 });

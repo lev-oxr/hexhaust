@@ -100,7 +100,7 @@ describe('Response to this exact request', () => {
         // This is how an ELM327 behaves: it hands over whatever arrived, unchecked.
         const careless: Transport = {
             request: async () => [0x41, 0x0d, 0x3c],
-            close: async () => { },
+            close: async () => {},
         };
         const s = new Scanner(careless);
         expect(await s.request([0x01, 0x0c])).toBeNull();
@@ -136,7 +136,7 @@ describe('Queue', () => {
                 if (calls === 1) throw new Error('adapter disconnected');
                 return [0x41, 0x0d, 0x3c];
             },
-            close: async () => { },
+            close: async () => {},
         };
         const s = new Scanner(flaky);
         const first = s.request([0x01, 0x0d]);

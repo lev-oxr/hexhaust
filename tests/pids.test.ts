@@ -77,7 +77,7 @@ describe('encode: examples', () => {
         ['05', 35, '4B'],
         ['0D', 60, '3C'],
         ['42', 12.582, '31 26'],
-        ['11', 50, '80'],          // 50 % is 127.5 raw, which rounds to 128
+        ['11', 50, '80'], // 50 % is 127.5 raw, which rounds to 128
     ] as const)('PID %s: %s → [%s]', (id, value, expected) => {
         expect(hex(pid(parseInt(id, 16)).encode(value))).toBe(expected);
     });

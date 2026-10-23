@@ -18,9 +18,7 @@ export interface FrameFeed {
 }
 
 export type SourceState =
-    | { kind: 'sim'; note?: string }
-    | { kind: 'connecting' }
-    | { kind: 'can'; info: AdapterInfo; bitrate: Bitrate; listenOnly: boolean };
+    { kind: 'sim'; note?: string } | { kind: 'connecting' } | { kind: 'can'; info: AdapterInfo; bitrate: Bitrate; listenOnly: boolean };
 
 /**
  * Services that only read. Everything else can change something in a real car:
@@ -90,12 +88,17 @@ export class SourceSwitch {
                 const real = this.real;
                 if (!real) return deps.simTransport.request(payload, opts);
                 if (this.st.kind === 'can' && this.st.listenOnly) {
-                    return Promise.reject(new SlcanError('LISTEN_ONLY', 'Listen only: nothing is sent. Untick "Listen only" to ask the car.'));
+                    return Promise.reject(
+                        new SlcanError('LISTEN_ONLY', 'Listen only: nothing is sent. Untick "Listen only" to ask the car.'),
+                    );
                 }
                 if (!this.allowStateChanges && !isReadOnlyRequest(payload)) {
                     const svc = (payload[0] ?? 0).toString(16).toUpperCase().padStart(2, '0');
                     return Promise.reject(
-                        new SlcanError('BLOCKED', `Service ${svc} can change the car's state. Tick "Allow state-changing services" to send it.`),
+                        new SlcanError(
+                            'BLOCKED',
+                            `Service ${svc} can change the car's state. Tick "Allow state-changing services" to send it.`,
+                        ),
                     );
                 }
                 return real.transport.request(payload, opts);
@@ -183,7 +186,10 @@ export class SourceSwitch {
             await bus.close().catch(() => undefined);
             if (this.st.kind === 'connecting') {
                 const unplugged = err instanceof SlcanError && err.code === 'DISCONNECTED';
-                this.setState({ kind: 'sim', note: unplugged ? 'The adapter disconnected. Back on the simulator.' : err instanceof Error ? err.message : String(err) });
+                this.setState({
+                    kind: 'sim',
+                    note: unplugged ? 'The adapter disconnected. Back on the simulator.' : err instanceof Error ? err.message : String(err),
+                });
             }
             throw err;
         }

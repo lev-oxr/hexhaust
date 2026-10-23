@@ -1,0 +1,103 @@
+name: Real car report
+description: Tell us how Hexhaust did on a real car, even if it did not work
+title: 'Real car: '
+labels: [real-car]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks. This is the most useful kind of report right now. Failures are as useful as successes.
+  - type: input
+    id: make
+    attributes:
+      label: Make
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+    validations:
+      required: true
+  - type: input
+    id: year
+    attributes:
+      label: Year
+    validations:
+      required: true
+  - type: input
+    id: engine
+    attributes:
+      label: Engine
+      placeholder: 2.0 TDI, 110 kW
+  - type: input
+    id: market
+    attributes:
+      label: Market (country)
+  - type: input
+    id: adapter
+    attributes:
+      label: Adapter and firmware
+      placeholder: CANable 2.0, Slcan 2.5
+    validations:
+      required: true
+  - type: dropdown
+    id: bitrate
+    attributes:
+      label: Bitrate
+      options:
+        - 500 kbit/s
+        - 250 kbit/s
+        - 125 kbit/s
+        - 1000 kbit/s
+    validations:
+      required: true
+  - type: dropdown
+    id: listen_only
+    attributes:
+      label: Did Listen only work?
+      options:
+        - 'Yes'
+        - 'No'
+        - Did not try
+  - type: textarea
+    id: pids
+    attributes:
+      label: Which PIDs answered?
+      placeholder: 0C, 0D, 05 ...
+  - type: dropdown
+    id: vin
+    attributes:
+      label: VIN request (09 02)
+      description: Do not write the VIN here. If you attach a log, mask it first.
+      options:
+        - Works
+        - Does not work
+        - Did not try
+  - type: dropdown
+    id: dtcs
+    attributes:
+      label: Were trouble codes read (03 / 07)?
+      options:
+        - 'Yes'
+        - 'No'
+        - Did not try
+  - type: textarea
+    id: log
+    attributes:
+      label: Raw log
+      description: From "Download raw log (.txt)". Mask your VIN.
+      render: text
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works
+        - Partly
+        - Does not work
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else

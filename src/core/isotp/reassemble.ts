@@ -83,7 +83,10 @@ export class Reassembler {
                 if (sn !== this.nextSn) {
                     const expected = this.nextSn;
                     this.reset();
-                    return { type: 'error', reason: `wrong sequence number: expected ${expected.toString(16).toUpperCase()}, got ${sn.toString(16).toUpperCase()}` };
+                    return {
+                        type: 'error',
+                        reason: `wrong sequence number: expected ${expected.toString(16).toUpperCase()}, got ${sn.toString(16).toUpperCase()}`,
+                    };
                 }
                 const missing = this.total - this.buffer.length;
                 this.buffer.push(...data.slice(1, 1 + Math.min(CF_PAYLOAD, missing)));

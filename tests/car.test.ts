@@ -156,7 +156,7 @@ describe('faults through the scanner', () => {
         expect(car.state.milOn).toBe(true);
         // and the fuel trim shows why
         const stft = (await ask([0x01, 0x06]))!;
-        expect((stft[2] - 128) * 100 / 128).toBeGreaterThan(10);
+        expect(((stft[2] - 128) * 100) / 128).toBeGreaterThan(10);
     });
 
     it('mode 04 with the engine running is refused: 7F 04 22, codes stay', async () => {

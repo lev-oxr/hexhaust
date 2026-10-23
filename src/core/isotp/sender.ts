@@ -49,7 +49,7 @@ export function sendIsoTp(bus: CanBus, clock: Clock, payload: Bytes, opts: SendO
     if (frames.length === 1) {
         bus.send({ id: opts.txId, data: frames[0], from: opts.from });
         opts.onEnd?.('sent');
-        return () => { };
+        return () => {};
     }
 
     let next = 1; // index of the next CF in frames

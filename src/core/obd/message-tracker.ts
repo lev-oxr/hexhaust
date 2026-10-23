@@ -91,7 +91,12 @@ export class MessageTracker {
 
                 const range = `message bytes ${before + 1}-${before + count}`;
                 if (r.type === 'progress') {
-                    return { rows: [['this frame', range], ['received', `${r.received} of ${r.total} bytes`]] };
+                    return {
+                        rows: [
+                            ['this frame', range],
+                            ['received', `${r.received} of ${r.total} bytes`],
+                        ],
+                    };
                 }
                 this.progress.delete(frame.id);
                 const what = summarizeMessage(r.payload, this.vocab);
@@ -130,14 +135,22 @@ export class MessageTracker {
             if (sid === 0x49 && ASCII_PIDS[pid] && offset >= 3) {
                 const printable = value >= 0x20 && value < 0x7f;
                 const ch = printable ? String.fromCharCode(value) : '·';
-                setByte(slot, printable ? ch : '·', `${where} ${ASCII_PIDS[pid]} character ${offset - 2}: ${printable ? `"${ch}"` : '(not printable)'} (ASCII 0x${hex(value)}).`);
+                setByte(
+                    slot,
+                    printable ? ch : '·',
+                    `${where} ${ASCII_PIDS[pid]} character ${offset - 2}: ${printable ? `"${ch}"` : '(not printable)'} (ASCII 0x${hex(value)}).`,
+                );
             } else if (DTC_SIDS[sid] && offset >= 2) {
                 const k = Math.floor((offset - 2) / 2); // which code, 0-based
                 const first = (offset - 2) % 2 === 0;
                 const a = p.bytes[2 + 2 * k];
                 const b = p.bytes[3 + 2 * k];
                 const code = a !== undefined && b !== undefined && this.vocab.decodeDtc ? ` ${this.vocab.decodeDtc(a, b)}` : '';
-                setByte(slot, 'DTC', `${where} Trouble code #${k + 1}${code}: ${first ? 'first' : 'second'} of its two bytes.${first && !code ? ' The second byte comes in the next frame.' : ''}`);
+                setByte(
+                    slot,
+                    'DTC',
+                    `${where} Trouble code #${k + 1}${code}: ${first ? 'first' : 'second'} of its two bytes.${first && !code ? ' The second byte comes in the next frame.' : ''}`,
+                );
             } else {
                 setByte(slot, 'data', `${where} See the whole message on the frame that completes it.`);
             }

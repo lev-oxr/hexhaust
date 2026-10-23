@@ -55,7 +55,7 @@ describe('VirtualBus', () => {
 
     it('a broken subscriber does not affect the others', () => {
         const bus = new VirtualBus(zeroClock);
-        const spy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const good = vi.fn();
         bus.subscribe(() => {
             throw new Error('boom');

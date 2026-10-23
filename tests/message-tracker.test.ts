@@ -30,7 +30,10 @@ describe('MessageTracker', () => {
         expect(ff.info?.rows[0]).toEqual(['length', '20 bytes']);
         expect(cf1.ex.bytes.map((b) => b.short)).toEqual(['PCI', 'J', 'C', '5', '4', '4', '4', 'R']);
         expect(cf1.ex.bytes[1].text).toBe('Message byte 7 of 20. VIN character 4: "J" (ASCII 0x4A).');
-        expect(cf1.info?.rows).toEqual([['this frame', 'message bytes 7-13'], ['received', '13 of 20 bytes']]);
+        expect(cf1.info?.rows).toEqual([
+            ['this frame', 'message bytes 7-13'],
+            ['received', '13 of 20 bytes'],
+        ]);
         expect(cf2.ex.summary).toBe(`Consecutive Frame #2 · complete: VIN ${VIN}`);
     });
 

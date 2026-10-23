@@ -99,7 +99,9 @@ describe('frames', () => {
         await settle(bus.start({ bitrate: 500, listenOnly: false }));
         bus.send({ id: 0x7df, data: [0x02, 0x01, 0x0c], from: 'tester' });
         expect(fake.received.at(-1)).toBe('t7DF802010C5555555555');
-        expect(frames).toEqual([{ id: 0x7df, data: [0x02, 0x01, 0x0c, 0x55, 0x55, 0x55, 0x55, 0x55], t: expect.any(Number), from: 'tester' }]);
+        expect(frames).toEqual([
+            { id: 0x7df, data: [0x02, 0x01, 0x0c, 0x55, 0x55, 0x55, 0x55, 0x55], t: expect.any(Number), from: 'tester' },
+        ]);
     });
 
     it('listen only: send throws LISTEN_ONLY and nothing is written', async () => {
@@ -148,7 +150,12 @@ describe('frames', () => {
         await settle(bus.start({ bitrate: 500, listenOnly: false }));
         bus.send({ id: 0x7df, data: [0x02, 0x01, 0x0c], from: 'tester' });
         await vi.advanceTimersByTimeAsync(50);
-        expect(trace.filter((l) => !l.frame).map((l) => `${l.dir} ${l.text}`).slice(0, 4)).toEqual(['out C', 'out V', expect.stringMatching(/^in \+Board/), 'out C']);
+        expect(
+            trace
+                .filter((l) => !l.frame)
+                .map((l) => `${l.dir} ${l.text}`)
+                .slice(0, 4),
+        ).toEqual(['out C', 'out V', expect.stringMatching(/^in \+Board/), 'out C']);
         expect(trace.filter((l) => l.frame).map((l) => l.dir)).toEqual(['out', 'in']);
     });
 });

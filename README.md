@@ -1,6 +1,7 @@
 # Hexhaust
 
 [![Build and deploy](https://github.com/lev-oxr/hexhaust/actions/workflows/deploy.yml/badge.svg)](https://github.com/lev-oxr/hexhaust/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Live: https://lev-oxr.github.io/hexhaust/**
 
@@ -34,11 +35,11 @@ Hexhaust talks to a car through a CANable 2.0 USB adapter running the
 [Slcan 2.5 firmware](https://github.com/Elmue/CANable-2.5-firmware-Slcan-and-Candlelight).
 The browser opens it as a serial port (Web Serial) and speaks slcan. The same ISO-TP code that runs the simulator handles the real frames, including our Flow Control.
 
-| Browser | Simulator | CANable |
-| --- | --- | --- |
-| Chrome, Edge, Opera (desktop) | ✓ | ✓ USB |
-| Chrome (Android) | ✓ | ✗ Web Serial on Android supports Bluetooth only |
-| Firefox, Safari | ✓ | ✗ no Web Serial |
+| Browser                       | Simulator | CANable                                         |
+| ----------------------------- | --------- | ----------------------------------------------- |
+| Chrome, Edge, Opera (desktop) | ✓         | ✓ USB                                           |
+| Chrome (Android)              | ✓         | ✗ Web Serial on Android supports Bluetooth only |
+| Firefox, Safari               | ✓         | ✗ no Web Serial                                 |
 
 Wiring from the OBD-II port: pin 6 → CAN-H, pin 14 → CAN-L, pin 5 → GND. Leave pin 16 (+12 V) disconnected and the adapter's terminator off. The car needs to speak CAN (most cars from the late 2000s on; all US cars from 2008).
 
@@ -62,14 +63,16 @@ npm run dev
 
 Open http://localhost:5173/hexhaust/ (the `/hexhaust/` path matters: the app is built for GitHub Pages).
 
-| Script | What it does |
-| --- | --- |
-| `npm run dev` | dev server with hot reload |
-| `npm test` | unit tests (Vitest) |
-| `npm run build` | type check and production build into `dist/` |
-| `npm run preview` | serve the production build locally |
+| Script            | What it does                                 |
+| ----------------- | -------------------------------------------- |
+| `npm run dev`     | dev server with hot reload                   |
+| `npm test`        | unit tests (Vitest)                          |
+| `npm run lint`    | ESLint                                       |
+| `npm run format`  | format everything with Prettier              |
+| `npm run build`   | type check and production build into `dist/` |
+| `npm run preview` | serve the production build locally           |
 
-Every push to `main` runs the type check, the tests and the build, then deploys `dist/` to GitHub Pages. Pull requests get the same checks without the deploy.
+Every push to `main` runs the lint, the format check, the type check, the tests and the build, then deploys `dist/` to GitHub Pages. Pull requests get the same checks without the deploy.
 
 ## How it is built
 
@@ -93,11 +96,35 @@ src/
 
 ## Learn the protocol
 
-- [OBD2 and ISO-TP basics](docs/OBD2%20and%20ISO-TP%20basics.md): a short primer written for this project
+- [OBD2 and ISO-TP basics](docs/obd2-isotp-basics.md): a short primer written for this project
 - [OBD2 Explained](https://csselectronics.com/pages/obd2-explained-simple-intro), CSS Electronics
 - [OBD-II PIDs](https://en.wikipedia.org/wiki/OBD-II_PIDs), Wikipedia
 - [UDS Explained](https://www.csselectronics.com/pages/uds-protocol-tutorial-unified-diagnostic-services) (ISO-TP section), CSS Electronics
 - [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API), MDN
+
+## Limitations
+
+- Only 11-bit CAN IDs: functional requests on `7DF`, physical on `7E0`, responses on `7E8`. 29-bit OBD addressing is not supported.
+- The simulator has one ECU (the engine).
+- Services: 01 (current data), 03 and 07 (trouble codes), 04 (clear codes), 09 (only PID 02, the VIN).
+- 15 PIDs: 04, 05, 06, 07, 0B, 0C, 0D, 0E, 0F, 10, 11, 1F, 2F, 42, 46.
+- Adapter bitrate: 500, 250, 125 or 1000 kbit/s.
+- CANable works only in desktop Chromium browsers (see the table above).
+- Not tested on a real car yet.
+
+## Roadmap
+
+Ideas, not commitments, and no dates:
+
+- Try it on real cars and fix what breaks.
+- More PIDs.
+- More than one ECU on the bus.
+- Freeze frame data (mode 02).
+- 29-bit OBD addressing.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The most useful thing right now is a Real car report: open an issue with the "Real car report" template and tell us how it went, even if nothing worked.
 
 ## License
 

@@ -88,12 +88,7 @@ const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * One simulation step.
  * @param dtS step length in seconds (the car ticks every 0.1 s)
  */
-export function stepVehicle(
-    s: VehicleState,
-    inp: CarInputs,
-    dtS: number,
-    fx: FaultEffects = NO_EFFECTS,
-): VehicleState {
+export function stepVehicle(s: VehicleState, inp: CarInputs, dtS: number, fx: FaultEffects = NO_EFFECTS): VehicleState {
     const running = inp.key === 'engine';
     const powered = inp.key !== 'off';
     const pedal = powered ? clamp(inp.pedalPct, 0, 100) / 100 : 0;
