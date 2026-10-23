@@ -5,7 +5,9 @@ import { Car } from './core/vehicle/car';
 import { attachEcu } from './core/vehicle/ecu';
 import { createEcuLink } from './core/vehicle/ecu-link';
 import { createStubState } from './core/vehicle/model';
+import { isWebSerialSupported, openWebSerial, requestSerialPort } from './transport/serial-link';
 import { SimTransport } from './transport/sim';
+import { SourceSwitch } from './transport/source';
 import { mountApp } from './ui/app';
 
 const clock = createSystemClock();
@@ -21,10 +23,16 @@ const ecuLink = createEcuLink(bus, clock, {
 attachEcu(ecuLink, clock, () => car.state, { onClearDtcs: () => car.clearDtcs() });
 car.start();
 
-const scanner = new Scanner(new SimTransport(bus, clock));
+// Stage 7: the scanner talks to source.transport, the log listens to source.frames.
+// Connect a CAN adapter and both switch to the real car; the same ISO-TP code runs over the real bus.
+const source = new SourceSwitch({ clock, simBus: bus, simTransport: new SimTransport(bus, clock) });
+const scanner = new Scanner(source.transport);
 
 mountApp(document.querySelector<HTMLDivElement>('#app')!, {
-  bus,
+  bus: source.frames,
   request: (payload) => scanner.request(payload),
   car,
+  source,
+  serialSupported: isWebSerialSupported(),
+  openLink: async () => openWebSerial(await requestSerialPort()),
 });

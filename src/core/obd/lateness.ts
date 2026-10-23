@@ -5,9 +5,9 @@
 // The scanner itself throws such responses away (isResponseTo + timeout); the log shows why.
 
 import { OBD_ID, type Bytes, type CanFrame } from '../can/frame';
-import { DEFAULT_TIMEOUT_MS } from '../../transport/transport';
+import { DEFAULT_TIMEOUT_MS, PENDING_TIMEOUT_MS } from '../../transport/transport';
 import type { FrameExplanation } from './explain';
-import { isResponseTo } from './match';
+import { isResponsePending, isResponseTo } from './match';
 
 export interface LateInfo {
     /** Time from the request to this response (the first frame of it), ms. */
@@ -20,6 +20,8 @@ export interface LateInfo {
 interface SentRequest {
     payload: Bytes;
     t: number;
+    /** After "response pending" the scanner waits P2* (5 s) instead of its usual timeout. */
+    limitMs?: number;
 }
 
 /** How many recent requests to remember when matching a stray response. */
@@ -75,9 +77,18 @@ export function createLatenessTracker(timeoutMs: number = DEFAULT_TIMEOUT_MS): L
                 return null;
             }
 
+            // "Response pending" restarts the clock: the ECU asked for more time, the scanner gave it.
+            if (isResponsePending(sent[k].payload, head)) {
+                sent[k].t = frame.t;
+                sent[k].limitMs = PENDING_TIMEOUT_MS;
+                current = null;
+                return null;
+            }
+
             const afterMs = frame.t - sent[k].t;
-            if (k < sent.length - 1) current = { afterMs, reason: 'superseded', timeoutMs };
-            else if (afterMs > timeoutMs) current = { afterMs, reason: 'timeout', timeoutMs };
+            const limitMs = sent[k].limitMs ?? timeoutMs;
+            if (k < sent.length - 1) current = { afterMs, reason: 'superseded', timeoutMs: limitMs };
+            else if (afterMs > limitMs) current = { afterMs, reason: 'timeout', timeoutMs: limitMs };
             else current = null;
             return current;
         },

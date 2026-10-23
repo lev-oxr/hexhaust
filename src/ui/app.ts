@@ -14,13 +14,24 @@ import { MONITOR_STATUS_INFO, MONITOR_STATUS_PID } from '../core/obd/monitor-sta
 import type { Car } from '../core/vehicle/car';
 import { createCarPanel } from './car-panel';
 import { createMinibar } from './minibar';
+import '../styles/connection.css';
+import type { SerialLink } from '../transport/serial-link';
+import type { SourceState, SourceSwitch } from '../transport/source';
+import { createConnectionPanel } from './connection-panel';
 
 export interface AppDeps {
-  /** Virtual bus: subscribing to frames is all the UI needs */
+  /** Where frames come from: subscribing is all the UI needs */
   bus: { subscribe(listener: (frame: CanFrame) => void): () => void };
-  /** Send an OBD request and wait for the response (null means timeout) */
+  /** The simulated car (stage 6). Its panel hides while a real car is the source */
   car?: Car;
+  /** Send an OBD request and wait for the response (null means timeout) */
   request: RequestFn;
+  /** Stage 7: simulator or real car. Without it the app runs on the simulator only */
+  source?: SourceSwitch;
+  /** Stage 7: ask the browser for a serial port and open it (Web Serial) */
+  openLink?: () => Promise<SerialLink>;
+  /** Stage 7: is Web Serial available in this browser? */
+  serialSupported?: boolean;
 }
 
 /** Dictionary for frame breakdowns: PIDs from pids.ts, trouble codes from dtc.ts. */
@@ -57,15 +68,22 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
     onClear: () => inspector.show(null), // otherwise it keeps showing a frame that is no longer in the log
   });
   const car = deps.car;
+  /** A real car is on the line: the simulated car's key and engine say nothing about it. */
+  const isReal = (): boolean => deps.source?.state.kind === 'can';
   const scanner = createScannerPanel({
     vocab,
     request: (p: Bytes) => deps.request(p),
-    ecu: car && { powered: () => car.powered, engineRunning: () => car.running },
+    ecu: car && { powered: () => isReal() || car.powered, engineRunning: () => isReal() || car.running },
   });
   const minibar = car ? createMinibar(car, () => scanner.clearCodes()) : null;
 
   const main = el('main', 'layout');
   const side = el('div', 'col col-side');
+  const connection =
+    deps.source && deps.openLink
+      ? createConnectionPanel({ source: deps.source, openLink: deps.openLink, supported: deps.serialSupported ?? false })
+      : null;
+  if (connection) side.append(connection.root);
   const carPanel = deps.car ? createCarPanel(deps.car) : null;
   if (carPanel) side.append(carPanel.root);
   side.append(scanner.root);
@@ -81,6 +99,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
   // the way a real scanner reconnects.
   let wasPowered = deps.car?.powered ?? true;
   const unsubscribeCar = deps.car?.subscribe((car) => {
+    if (isReal()) {
+      wasPowered = car.powered; // the simulated key is not what the real ECU listens to
+      return;
+    }
     if (car.powered && !wasPowered) {
       log.mark('Ignition: the ECU is back on the bus');
       void scanner.discover();
@@ -91,9 +113,31 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
     wasPowered = car.powered;
   });
 
+  // Stage 7: a new source is a different ECU. Say so in the log, hide the simulated car, search its PIDs again.
+  let shown: string | null = null;
+  const describeSource = (s: SourceState): string | null =>
+    s.kind === 'sim'
+      ? `Source: simulator${s.note ? ` (${s.note})` : ''}`
+      : s.kind === 'can'
+        ? `Source: car through the CAN adapter, ${s.bitrate} kbit/s${s.listenOnly ? ', listen only' : ''}`
+        : null;
+  const unsubscribeSource = deps.source?.onChange((s) => {
+    const real = s.kind === 'can';
+    if (carPanel) carPanel.root.hidden = real;
+    if (minibar) minibar.root.hidden = real;
+    const text = describeSource(s);
+    if (!text || text === shown) return;
+    shown = text;
+    log.mark(text);
+    if (real && s.listenOnly) scanner.notice('Listen only: the scanner sends nothing. Untick "Listen only" in Data source to ask the car.');
+    else void scanner.discover();
+  });
+
   return {
     destroy() {
       unsubscribe();
+      unsubscribeSource?.();
+      connection?.destroy();
       scanner.destroy();
       carPanel?.destroy();
       minibar?.destroy();

@@ -43,3 +43,11 @@ export function isResponseTo(req: Bytes, resp: Bytes): boolean {
     }
     return true;
 }
+
+/**
+ * 7F <service> 78: "request received, still working on it". Not an answer yet:
+ * the tester keeps waiting, now up to P2* (5000 ms) instead of the usual timeout.
+ */
+export function isResponsePending(req: Bytes, resp: Bytes): boolean {
+    return req.length > 0 && isNegativeResponse(resp) && resp[1] === req[0] && resp[2] === NRC.RESPONSE_PENDING;
+}

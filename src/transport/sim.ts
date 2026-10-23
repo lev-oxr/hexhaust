@@ -1,6 +1,7 @@
-// Transport to the simulator: OBD messages ⇄ CAN frames on the virtual bus.
+// Transport over any CanBus: OBD messages ⇄ CAN frames.
 // It plays the part an ELM327 plays in a real car: sends the request as a Single Frame,
 // gathers a long response (FF + CF) and answers each First Frame with a Flow Control.
+// Stage 7: the same class talks to a real car through SlcanBus. The name stayed from the simulator days.
 
 import type { CanBus } from '../core/can/bus';
 import type { Clock } from '../core/clock';
@@ -8,8 +9,8 @@ import { OBD_ID, type Bytes } from '../core/can/frame';
 import { DEFAULT_FLOW_CONTROL, encodeFlowControl, type FlowControl } from '../core/isotp/flow-control';
 import { Reassembler } from '../core/isotp/reassemble';
 import { encodeSingleFrame } from '../core/isotp/single-frame';
-import { isResponseTo } from '../core/obd/match';
-import { DEFAULT_TIMEOUT_MS, type RequestOptions, type Transport } from './transport';
+import { isResponsePending, isResponseTo } from '../core/obd/match';
+import { DEFAULT_TIMEOUT_MS, PENDING_TIMEOUT_MS, type RequestOptions, type Transport } from './transport';
 
 export interface SimTransportOptions {
     /** What to answer a First Frame with. Default 30 00 00, like an ELM327. */
@@ -56,9 +57,9 @@ export class SimTransport implements Transport {
             };
 
             let timer = this.clock.setTimeout(() => finish(null), timeoutMs);
-            const restartTimer = (): void => {
+            const restartTimer = (ms = timeoutMs): void => {
                 this.clock.clearTimeout(timer);
-                timer = this.clock.setTimeout(() => finish(null), timeoutMs);
+                timer = this.clock.setTimeout(() => finish(null), ms);
             };
 
             // Subscribe BEFORE sending: the ECU may answer very quickly.
@@ -69,6 +70,11 @@ export class SimTransport implements Transport {
                 const r = rx.push(frame.data);
                 switch (r.type) {
                     case 'single':
+                        // "Still working on it": not the answer yet, wait longer for the real one.
+                        if (isResponsePending(payload, r.payload)) {
+                            restartTimer(PENDING_TIMEOUT_MS);
+                            return;
+                        }
                         // Skip a foreign or late response and keep waiting.
                         if (isResponseTo(payload, r.payload)) finish(r.payload);
                         return;

@@ -1,0 +1,155 @@
+/* ---------- Data source panel (stage 7) ---------- */
+.conn-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.conn-badge.is-can {
+  border-color: var(--r-data);
+  color: var(--r-data);
+  font-weight: 600;
+}
+.conn-badge.is-can.is-listen {
+  border-color: var(--r-service);
+  color: var(--r-service);
+}
+.conn-badge.is-connecting {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.conn-panel.is-real {
+  border-color: var(--r-data);
+}
+
+.conn-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.conn-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conn-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.conn-rate select {
+  min-height: 32px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+}
+.conn-hint,
+.conn-status,
+.conn-bus {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.conn-status:empty {
+  display: none;
+}
+.conn-status.is-error,
+.conn-bus.is-error {
+  color: var(--r-error);
+}
+.conn-bus {
+  padding: 6px 8px;
+  border-left: 3px solid var(--r-data);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.conn-bus.is-error {
+  border-left-color: var(--r-error);
+}
+
+.conn-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.conn-facts dt {
+  color: var(--muted);
+}
+.conn-facts dd {
+  margin: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.conn-check {
+  align-items: flex-start;
+}
+.conn-check input {
+  margin-top: 3px;
+}
+.conn-count {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.conn-trace summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.conn-trace .btn {
+  margin-top: 6px;
+}
+.conn-trace-list {
+  max-height: 220px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  font: 0.8rem/1.5 var(--mono);
+}
+.conn-trace-list:empty::before {
+  content: 'Nothing yet. Connect an adapter to see the slcan commands.';
+  color: var(--muted);
+}
+.conn-trace-list li {
+  display: grid;
+  grid-template-columns: 5.5em 1.2em 1fr;
+  gap: 4px;
+}
+.trace-t {
+  color: var(--muted);
+  text-align: right;
+}
+.trace-out .trace-dir,
+.trace-out .trace-text {
+  color: var(--who-tester);
+}
+.trace-in .trace-dir {
+  color: var(--who-ecu);
+}
+.trace-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The minibar sets its own display, which would beat the hidden attribute: a real car hides it */
+.minibar[hidden] {
+  display: none;
+}

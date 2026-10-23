@@ -22,6 +22,8 @@ export interface ScannerPanel {
   discover(): Promise<void>;
   /** The key went to Off: the status line must not claim the ECU still answers */
   ecuOff(): void;
+  /** Put a message in the status line (a new data source, listen only…), unless a search is running */
+  notice(text: string): void;
   /** Same as the Clear codes button; resolves to the text shown next to it */
   clearCodes(): Promise<string>;
   destroy(): void;
@@ -183,6 +185,15 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     }
   }
 
+  /** For the buttons: with a real adapter the reason ("Service 04 is blocked", "Listen only") is the answer. */
+  async function tryRequest(payload: Bytes): Promise<{ resp: Bytes | null; error?: string }> {
+    try {
+      return { resp: await request(payload) };
+    } catch (err) {
+      return { resp: null, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   async function readOnce(row: Row): Promise<void> {
     setValue(row, '…', 'busy');
     const resp = await safeRequest([0x01, row.def.pid]);
@@ -289,10 +300,10 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   vinBtn.addEventListener('click', () => {
     vinBtn.disabled = true;
     showOut(vinOut, '…', true);
-    void safeRequest([0x09, 0x02]).then((resp) => {
+    void tryRequest([0x09, 0x02]).then(({ resp, error }) => {
       vinBtn.disabled = false;
       if (!alive) return;
-      if (!resp) return showOut(vinOut, silent(), false);
+      if (!resp) return showOut(vinOut, error ?? silent(), false);
       const vin = decodeVinResponse(resp);
       showOut(vinOut, vin ?? `not a VIN: ${hexBytes(resp)}`, vin !== null);
     });
@@ -301,10 +312,10 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   dtcBtn.addEventListener('click', () => {
     dtcBtn.disabled = true;
     showOut(dtcOut, '…', true);
-    void safeRequest([0x03]).then((resp) => {
+    void tryRequest([0x03]).then(({ resp, error }) => {
       dtcBtn.disabled = false;
       if (!alive) return;
-      if (!resp) return showOut(dtcOut, silent(), false);
+      if (!resp) return showOut(dtcOut, error ?? silent(), false);
       if (resp[0] !== 0x43) return showOut(dtcOut, `unexpected: ${hexBytes(resp)}`, false);
       const count = resp[1] ?? 0;
       const body = resp.slice(2, 2 + 2 * count);
@@ -317,12 +328,13 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   function clearCodes(): Promise<string> {
     clearBtn.disabled = true;
     showOut(clearOut, '…', true);
-    return safeRequest([0x04]).then((resp) => {
+    return tryRequest([0x04]).then(({ resp, error }) => {
       clearBtn.disabled = false;
       if (!alive) return '';
       let text: string;
       let ok = false;
-      if (!resp) text = silent();
+      if (error) text = error;
+      else if (!resp) text = silent();
       else if (resp[0] === 0x44) {
         text = 'cleared (44)';
         ok = true;
@@ -348,10 +360,10 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     manualOut.className = 'manual-out';
     manualOut.textContent = 'Waiting for the response…';
     manualBtn.disabled = true;
-    void safeRequest(parsed.bytes).then((resp) => {
+    void tryRequest(parsed.bytes).then(({ resp, error }) => {
       manualBtn.disabled = false;
       if (!alive) return;
-      manualOut.textContent = resp ? `Response: ${hexBytes(resp)}` : 'No response (100 ms timeout).';
+      manualOut.textContent = resp ? `Response: ${hexBytes(resp)}` : (error ?? 'No response (100 ms timeout).');
       manualOut.className = resp ? 'manual-out' : 'manual-out is-error';
     });
   });
@@ -362,6 +374,9 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     clearCodes,
     ecuOff() {
       if (!discovering) status.textContent = 'ECU is off (key Off): nothing answers until Ignition.';
+    },
+    notice(text) {
+      if (!discovering) status.textContent = text;
     },
     destroy() {
       alive = false;

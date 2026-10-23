@@ -6,6 +6,9 @@ import type { Bytes } from '../core/can/frame';
 /** How long to wait for a response unless told otherwise. */
 export const DEFAULT_TIMEOUT_MS = 100;
 
+/** After "response pending" (7F xx 78) the ECU may take this long (ISO 15765-4 P2*CAN). */
+export const PENDING_TIMEOUT_MS = 5000;
+
 export interface RequestOptions {
     /** true — to a specific module (7E0), false — broadcast (7DF). Defaults to false. */
     physical?: boolean;
