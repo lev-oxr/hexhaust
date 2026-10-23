@@ -123,6 +123,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): App {
         : null;
   const unsubscribeSource = deps.source?.onChange((s) => {
     const real = s.kind === 'can';
+    scanner.resetOutputs();
+    minibar?.reset();
     if (carPanel) carPanel.root.hidden = real;
     if (minibar) minibar.root.hidden = real;
     const text = describeSource(s);

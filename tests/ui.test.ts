@@ -342,6 +342,39 @@ describe('scanner panel: QA fixes', () => {
     expect(p.root.querySelector('.status')!.textContent).toContain('ECU is off');
   });
 
+  it('QA BUG-3: "Tick at least one PID." goes away when a PID is ticked or polling starts', () => {
+    const p = make(null, { powered: true, running: false });
+    const status = p.root.querySelector('.status')!;
+    const before = status.textContent;
+    const boxes = [...p.root.querySelectorAll<HTMLInputElement>('.pid-row input')].filter((c) => c.checked);
+    for (const c of boxes) c.checked = false;
+    const poll = p.root.querySelector<HTMLButtonElement>('.panel-head .btn')!;
+    poll.click();
+    expect(status.textContent).toBe('Tick at least one PID.');
+    boxes[0].checked = true;
+    boxes[0].dispatchEvent(new Event('change'));
+    expect(status.textContent).toBe(before);
+    p.destroy();
+  });
+
+  it('QA BUG-4: resetOutputs() forgets VIN, codes and the Clear codes result', async () => {
+    const p = make([0x44], { powered: true, running: false });
+    await p.clearCodes();
+    expect(out(p, 2)).toBe('cleared (44)');
+    p.resetOutputs();
+    expect([0, 1, 2].map((i) => out(p, i))).toEqual(['-', '-', '-']);
+  });
+
+  it('QA BUG-6: a request that was never sent says why, not "no response"', async () => {
+    const reason = 'Listen only: nothing is sent. Untick "Listen only" to ask the car.';
+    const p = createScannerPanel({ vocab, request: async () => { throw new Error(reason); } });
+    const row = p.root.querySelector<HTMLButtonElement>('.pid-row .btn-icon')!;
+    row.click();
+    await vi.waitFor(() => expect(p.root.querySelector('.pid-row .val')!.textContent).toBe('not sent'));
+    expect(p.root.querySelector('.pid-row .val')!.getAttribute('title')).toBe(reason);
+    expect(p.root.querySelector('.status')!.textContent).toBe(reason);
+  });
+
   it('BUG-4: silence with the key off says so', async () => {
     const p = make(null, { powered: false, running: false });
     p.root.querySelectorAll<HTMLButtonElement>('.vehicle .btn')[0].click();

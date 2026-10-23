@@ -141,6 +141,13 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
     if (index >= 0 && index < data.length) slots[index] = { index, value: val(index), role, short, text };
   };
 
+  // Another module on the bus (not a tester request, not an ECU response): its bytes are not OBD, so no PCI or service is read from them.
+  if (direction === 'other') {
+    data.forEach((_, i) => put(i, 'data', 'data', 'Not decoded: this ID is outside OBD-II, so these bytes can mean anything the sender wants.'));
+    notes.push('A frame from another module on the bus. Hexhaust only decodes OBD-II (7DF, 7E0-7EF).');
+    return { direction, idText: describeId(id), summary: `frame from another ECU · ${h3(id)}`, bytes: slots as ByteInfo[], calc: null, notes };
+  }
+
   let summary = '';
   let calc: Calc | null = null;
   // Indices of payload bytes (after the PCI); no request parsing for CF and FC frames.
@@ -234,14 +241,27 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
         summary = pidCode !== undefined ? `request ${h2(s)} ${h2(pidCode)} · ${pidName(pidCode, pidInfo, s)}` : `request ${h2(s)} · ${modeName(s)}`;
       }
     } else if (s === 0x7f) {
-      put(sIdx, 'error', '7F', 'Byte 7F marks a negative response: the ECU understood the request but refused it.');
       const reqIdx = rest[0];
       const nrcIdx = rest[1];
-      if (reqIdx !== undefined) put(reqIdx, 'service', 'mode', `Requested mode ${h2(val(reqIdx))}: ${modeName(val(reqIdx))}. This is the request the ECU refused.`);
+      const pending = nrcIdx !== undefined && val(nrcIdx) === 0x78;
+      put(
+        sIdx,
+        'error',
+        '7F',
+        pending
+          ? 'Byte 7F starts a negative-response frame. This one is not a refusal: code 78 means "response pending", the ECU asks the tester to wait.'
+          : 'Byte 7F marks a negative response: the ECU understood the request but refused it.',
+      );
+      if (reqIdx !== undefined) {
+        put(reqIdx, 'service', 'mode', `Requested mode ${h2(val(reqIdx))}: ${modeName(val(reqIdx))}. ${pending ? 'This is the request the ECU is still working on.' : 'This is the request the ECU refused.'}`);
+      }
       if (nrcIdx !== undefined) put(nrcIdx, 'error', 'code', `Reason code ${h2(val(nrcIdx))}: ${NRC[val(nrcIdx)] ?? 'unknown code'}.`);
       for (const i of rest.slice(2)) put(i, 'data', 'data', 'Extra data.');
       if (pciType === 0x0) {
-        summary = `refusal: mode ${reqIdx !== undefined ? h2(val(reqIdx)) : '??'} · ${nrcIdx !== undefined ? (NRC[val(nrcIdx)] ?? `code ${h2(val(nrcIdx))}`) : 'no code'}`;
+        const mode = reqIdx !== undefined ? h2(val(reqIdx)) : '??';
+        summary = pending
+          ? `response pending: mode ${mode} · the ECU asks to wait`
+          : `refusal: mode ${mode} · ${nrcIdx !== undefined ? (NRC[val(nrcIdx)] ?? `code ${h2(val(nrcIdx))}`) : 'no code'}`;
       }
     } else {
       const mode = s - 0x40;
@@ -270,7 +290,7 @@ export function explainFrame(frame: Pick<CanFrame, 'id' | 'data'>, vocab: Vocab)
   }
 
   const bytes: ByteInfo[] = slots.map((b, i) => b ?? { index: i, value: val(i), role: 'data', short: 'data', text: 'Byte without an explanation.' });
-  if (!summary) summary = direction === 'other' ? 'frame outside OBD-II' : 'frame';
+  if (!summary) summary = 'frame';
 
   return { direction, idText: describeId(id), summary, bytes, calc, notes };
 

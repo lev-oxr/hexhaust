@@ -2,19 +2,19 @@
    Uses the tokens from main.css (--surface, --accent, --r-error, …) and adds three of its own. */
 :root {
   --mil: #c2410c;
-  --warn: #a16207;
+  --warn: #c2410c;
   --gauge-face: #f8f6f1;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --mil: #fb923c;
-    --warn: #facc15;
+    --warn: #fb923c;
     --gauge-face: #181612;
   }
 }
 :root[data-theme='dark'] {
   --mil: #fb923c;
-  --warn: #facc15;
+  --warn: #fb923c;
   --gauge-face: #181612;
 }
 

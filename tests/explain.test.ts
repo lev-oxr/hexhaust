@@ -117,6 +117,22 @@ describe('negative response', () => {
   });
 });
 
+describe('QA stage 7', () => {
+  it('BUG-1: 7F xx 78 is "response pending", not a refusal', () => {
+    const ex = explainFrame({ id: 0x7e8, data: [0x03, 0x7f, 0x09, 0x78, 0x55, 0x55, 0x55, 0x55] }, vocab);
+    expect(ex.summary).toBe('response pending: mode 09 · the ECU asks to wait');
+    expect(ex.bytes[1]?.text).toContain('not a refusal');
+    expect(ex.bytes[2]?.text).not.toContain('refused');
+  });
+
+  it('BUG-2: a frame from another module is not read as a request', () => {
+    const ex = explainFrame({ id: 0x3c0, data: [0x9b, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07] }, vocab);
+    expect(ex.summary).toBe('frame from another ECU · 3C0');
+    expect(ex.bytes.every((b) => b.role === 'data')).toBe(true);
+    expect(ex.summary).not.toContain('unknown mode');
+  });
+});
+
 describe('ISO-TP', () => {
   it('VIN First Frame: length and ASCII', () => {
     const data = [0x10, 0x14, 0x49, 0x02, 0x01, 0x57, 0x41, 0x55];

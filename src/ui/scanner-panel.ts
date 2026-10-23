@@ -24,6 +24,8 @@ export interface ScannerPanel {
   ecuOff(): void;
   /** Put a message in the status line (a new data source, listen only…), unless a search is running */
   notice(text: string): void;
+  /** A different data source is a different ECU: VIN, codes and Clear codes results from the old one no longer apply */
+  resetOutputs(): void;
   /** Same as the Clear codes button; resolves to the text shown next to it */
   clearCodes(): Promise<string>;
   destroy(): void;
@@ -169,6 +171,21 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
   let alive = true;
   let polling = false;
 
+  const TICK = 'Tick at least one PID.';
+  /** The status line without the passing "Tick at least one PID." */
+  let baseStatus = status.textContent ?? '';
+  const setStatus = (text: string): void => {
+    baseStatus = text;
+    status.textContent = text;
+  };
+  const showTick = (): void => {
+    status.textContent = TICK;
+  };
+  const clearTick = (): void => {
+    if (status.textContent === TICK) status.textContent = baseStatus;
+  };
+  for (const r of rows.values()) r.check.addEventListener('change', clearTick);
+
   const checkedRows = (): Row[] => [...rows.values()].filter((r) => r.check.checked && !r.check.disabled);
 
   function setValue(row: Row, text: string, state: 'ok' | 'none' | 'error' | 'busy', title = ''): void {
@@ -196,8 +213,14 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
 
   async function readOnce(row: Row): Promise<void> {
     setValue(row, '…', 'busy');
-    const resp = await safeRequest([0x01, row.def.pid]);
+    const { resp, error } = await tryRequest([0x01, row.def.pid]);
     if (!alive) return;
+    if (error) {
+      // Listen only (or an adapter failure): the request never left, which is not the same as a silent ECU.
+      setValue(row, 'not sent', 'error', error);
+      setStatus(error);
+      return;
+    }
     if (!resp) return setValue(row, 'no response', 'none', 'The ECU stayed silent: timeout, or the PID is not supported');
     if (resp[0] === 0x7f) return setValue(row, `refusal ${hex2(resp[2] ?? 0)}`, 'error', hexBytes(resp));
     if (resp[0] !== 0x41 || resp[1] !== row.def.pid) return setValue(row, '?', 'error', `Unexpected response: ${hexBytes(resp)}`);
@@ -221,7 +244,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
       const batch = checkedRows();
       if (batch.length === 0) {
         setPolling(false);
-        status.textContent = 'Tick at least one PID.';
+        showTick();
         return;
       }
       for (const row of batch) {
@@ -237,10 +260,12 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
       setPolling(false);
       return;
     }
+    clearTick();
     if (checkedRows().length === 0) {
-      status.textContent = 'Tick at least one PID.';
+      showTick();
       return;
     }
+    clearTick();
     setPolling(true);
     void pollLoop();
   });
@@ -250,7 +275,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     if (discovering) return;
     discovering = true;
     findBtn.disabled = true;
-    status.textContent = 'Looking for supported PIDs…';
+    setStatus('Looking for supported PIDs…');
     const supported = new Set<number>();
     let answered = false;
     let base = 0;
@@ -269,7 +294,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
 
     if (!answered) {
       for (const row of rows.values()) markSupport(row, true);
-      status.textContent = 'The ECU did not answer 01 00. All PIDs stay available to try.';
+      setStatus('The ECU did not answer 01 00. All PIDs stay available to try.');
       return;
     }
     let found = 0;
@@ -278,7 +303,7 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
       if (ok) found++;
       markSupport(row, ok);
     }
-    status.textContent = `ECU supports ${found} of ${rows.size} PIDs in this table.`;
+    setStatus(`ECU supports ${found} of ${rows.size} PIDs in this table.`);
   }
 
   function markSupport(row: Row, ok: boolean): void {
@@ -373,10 +398,13 @@ export function createScannerPanel(opts: ScannerPanelOptions): ScannerPanel {
     discover,
     clearCodes,
     ecuOff() {
-      if (!discovering) status.textContent = 'ECU is off (key Off): nothing answers until Ignition.';
+      if (!discovering) setStatus('ECU is off (key Off): nothing answers until Ignition.');
     },
     notice(text) {
-      if (!discovering) status.textContent = text;
+      if (!discovering) setStatus(text);
+    },
+    resetOutputs() {
+      for (const out of [vinOut, dtcOut, clearOut]) showOut(out, '-', true);
     },
     destroy() {
       alive = false;

@@ -22,6 +22,7 @@ export class SimTransport implements Transport {
     private readonly clock: Clock;
     private readonly flowControl: FlowControl;
     private closed = false;
+    private readonly pending = new Set<() => void>();
 
     constructor(bus: CanBus, clock: Clock, options: SimTransportOptions = {}) {
         this.bus = bus;
@@ -51,11 +52,14 @@ export class SimTransport implements Transport {
             const finish = (result: Bytes | null): void => {
                 if (finished) return;
                 finished = true;
+                this.pending.delete(cancel);
                 this.clock.clearTimeout(timer);
                 unsubscribe();
                 resolve(result);
             };
 
+            const cancel = (): void => finish(null);
+            this.pending.add(cancel);
             let timer = this.clock.setTimeout(() => finish(null), timeoutMs);
             const restartTimer = (ms = timeoutMs): void => {
                 this.clock.clearTimeout(timer);
@@ -115,6 +119,7 @@ export class SimTransport implements Transport {
 
     async close(): Promise<void> {
         this.closed = true;
+        for (const cancel of [...this.pending]) cancel(); // nobody should wait out a timeout on a port that is gone
     }
 }
 

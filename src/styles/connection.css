@@ -153,3 +153,19 @@
 .minibar[hidden] {
   display: none;
 }
+
+/* Folded on the simulator: one line instead of a screenful */
+.conn-fold > summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.conn-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.conn-note[hidden] {
+  display: none;
+}

@@ -181,7 +181,10 @@ export class SourceSwitch {
             return info;
         } catch (err) {
             await bus.close().catch(() => undefined);
-            if (this.st.kind === 'connecting') this.setState({ kind: 'sim', note: err instanceof Error ? err.message : String(err) });
+            if (this.st.kind === 'connecting') {
+                const unplugged = err instanceof SlcanError && err.code === 'DISCONNECTED';
+                this.setState({ kind: 'sim', note: unplugged ? 'The adapter disconnected. Back on the simulator.' : err instanceof Error ? err.message : String(err) });
+            }
             throw err;
         }
     }

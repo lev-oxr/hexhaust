@@ -5,6 +5,8 @@ import { el } from './dom';
 
 export interface Minibar {
   root: HTMLElement;
+  /** Forget the last Clear codes result (a different data source) */
+  reset(): void;
   destroy(): void;
 }
 
@@ -34,8 +36,13 @@ export function createMinibar(car: Car, clear: () => Promise<string>): Minibar {
   const setText = (node: HTMLElement, text: string): void => {
     if (node.textContent !== text) node.textContent = text;
   };
+  let situation = '';
   function render(): void {
     const s = car.state;
+    // "refused: engine still running" is wrong the moment the engine stops or the codes are gone
+    const now = `${car.running}|${s.milOn}|${s.storedDtcs.join()}|${s.pendingDtcs.join()}`;
+    if (now !== situation && !btn.disabled) out.textContent = '';
+    situation = now;
     const parts = [
       s.storedDtcs.length > 0 ? `stored ${s.storedDtcs.join(', ')}` : '',
       s.pendingDtcs.length > 0 ? `pending ${s.pendingDtcs.join(', ')}` : '',
@@ -49,5 +56,5 @@ export function createMinibar(car: Car, clear: () => Promise<string>): Minibar {
   const unsubscribe = car.subscribe(render);
   render();
 
-  return { root, destroy: unsubscribe };
+  return { root, reset: () => void (out.textContent = ''), destroy: unsubscribe };
 }

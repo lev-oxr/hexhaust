@@ -77,6 +77,60 @@ describe('connection panel', () => {
     expect(q('.conn-trace-list').textContent).not.toContain('t7DF'); // frames go to the bus log, not here
   });
 
+  it('QA: the panel is folded on the simulator and opens when a car is connected', async () => {
+    mount();
+    expect(q<HTMLDetailsElement>('.conn-fold').open).toBe(false);
+    button('Connect CAN adapter').click();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(q<HTMLDetailsElement>('.conn-fold').open).toBe(true);
+    expect([...document.querySelectorAll<HTMLElement>('.conn-note')].filter((n) => !n.hidden).map((n) => n.textContent).join(' ')).toMatch(/04 erases/);
+  });
+
+  it('QA BUG-5: the keyboard focus moves to Back to simulator when Connect disappears, and back', async () => {
+    mount();
+    button('Connect CAN adapter').focus();
+    button('Connect CAN adapter').click();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.activeElement).toBe(button('Back to simulator'));
+    button('Back to simulator').click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).toBe(button('Connect CAN adapter'));
+  });
+
+  it('QA BUG-5: Listen only keeps the focus after the adapter reopens', async () => {
+    mount();
+    button('Connect CAN adapter').click();
+    await vi.advanceTimersByTimeAsync(3000);
+    const listen = checkbox('Listen only');
+    listen.focus();
+    listen.click();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.activeElement).toBe(listen);
+  });
+
+  it('QA BUG-7: unplugging while connecting ends with the same message as unplugging later', async () => {
+    const fake = new FakeCanable(clock);
+    mount(async () => fake);
+    button('Connect CAN adapter').click();
+    await vi.advanceTimersByTimeAsync(10);
+    fake.unplug();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(source.state).toEqual({ kind: 'sim', note: 'The adapter disconnected. Back on the simulator.' });
+  });
+
+  it('QA BUG-7: unplugging during a request ends it at once, not after the timeout', async () => {
+    const fake = new FakeCanable(clock);
+    mount(async () => fake);
+    button('Connect CAN adapter').click();
+    await vi.advanceTimersByTimeAsync(3000);
+    const pending = source.transport.request([0x09, 0x02], { timeoutMs: 5000 });
+    let done = false;
+    void pending.then(() => (done = true));
+    fake.unplug();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(done).toBe(true);
+  });
+
   it('listen only: the badge says so and the adapter reopens silent', async () => {
     const fake = new FakeCanable(clock);
     mount(async () => fake);

@@ -8,7 +8,7 @@ export interface Inspector {
   show(entry: LogEntry | null): void;
 }
 
-const DIR_TEXT = { request: 'tester → ECU', response: 'ECU → tester', other: 'unknown direction' } as const;
+const DIR_TEXT = { request: 'tester → ECU', response: 'ECU → tester', other: 'another module on the bus' } as const;
 
 export function createInspector(): Inspector {
   const root = el('section', 'panel inspector');

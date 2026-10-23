@@ -34,6 +34,9 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
   const badge = el('span', 'conn-badge');
   head.append(title, el('span', 'spacer'), badge);
 
+  // Most visitors use the simulator: the panel starts folded. It opens by itself when a car is connected or something went wrong.
+  const fold = el('details', 'conn-fold');
+  fold.append(el('summary', undefined, 'Connect a real car (CANable adapter)'));
   const body = el('div', 'conn-body');
 
   // --- Connect row ---
@@ -51,6 +54,7 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
   connectRow.append(rateLabel, el('span', 'spacer'), connectBtn, disconnectBtn);
 
   const hint = el('p', 'conn-hint');
+  const bitrateNote = el('p', 'conn-note', 'Pick the bitrate your car uses (most cars since about 2008: 500 kbit/s). At the wrong bitrate the adapter produces error frames on the bus, which can make modules log faults. If you are not sure, tick "Listen only" right after connecting.');
   const status = el('p', 'conn-status');
   status.setAttribute('role', 'status');
 
@@ -76,6 +80,7 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
   const allow = el('input');
   allow.type = 'checkbox';
   allowLabel.append(allow, el('span', undefined, 'Allow state-changing services (04 clears codes and readiness monitors)'));
+  const allowNote = el('p', 'conn-note', 'Off by default: 04 erases the trouble codes and resets the readiness monitors, and a car can fail an inspection until it has driven enough to set them again. Nothing is sent to a real car that could change it unless you tick this.');
 
   // --- Raw conversation ---
   const details = el('details', 'conn-trace');
@@ -86,8 +91,9 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
   download.type = 'button';
   details.append(summary, traceList, download);
 
-  body.append(connectRow, hint, status, facts, busLine, listenLabel, obdLabel, allowLabel, details);
-  root.append(head, body);
+  body.append(connectRow, hint, bitrateNote, status, facts, busLine, listenLabel, obdLabel, allowLabel, allowNote, details);
+  fold.append(body);
+  root.append(head, fold);
 
   // ---------- Logic ----------
   let busy = false;
@@ -111,6 +117,7 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
 
   function render(s: SourceState): void {
     const real = s.kind === 'can';
+    const focused = root.contains(document.activeElement) ? document.activeElement : null;
     badge.textContent = s.kind === 'sim' ? 'Simulator' : s.kind === 'connecting' ? 'Connecting…' : s.listenOnly ? 'Car · listen only' : 'Car';
     badge.className = `conn-badge is-${s.kind}${real && s.listenOnly ? ' is-listen' : ''}`;
     root.classList.toggle('is-real', real);
@@ -120,7 +127,7 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
     rate.disabled = s.kind !== 'sim' || !opts.supported;
     disconnectBtn.hidden = s.kind === 'sim';
 
-    for (const label of [listenLabel, obdLabel, allowLabel]) label.hidden = !real;
+    for (const label of [listenLabel, obdLabel, allowLabel, allowNote]) label.hidden = !real;
     listen.checked = real && s.listenOnly;
     allow.checked = source.allowStateChanges;
     allow.disabled = real && s.listenOnly;
@@ -149,6 +156,10 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
         ? 'On the bus, listening. Behind a gateway (VW and most new cars) the OBD port stays silent until someone asks.'
         : 'On the bus. The scanner and the log now show your car.';
     }
+
+    if (s.kind !== 'sim' || status.textContent) fold.open = true;
+    // The button that had the focus just disappeared (Connect → Back, and back): keep the keyboard where it was.
+    if (focused instanceof HTMLElement && focused.hidden) (s.kind === 'sim' ? connectBtn : disconnectBtn).focus();
   }
 
   function updateHidden(): void {
@@ -186,6 +197,7 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
   disconnectBtn.addEventListener('click', () => void source.useSimulator());
 
   listen.addEventListener('change', () => {
+    const hadFocus = document.activeElement === listen;
     listen.disabled = true;
     void source
       .setListenOnly(listen.checked)
@@ -196,6 +208,8 @@ export function createConnectionPanel(opts: ConnectionPanelOptions): ConnectionP
       .finally(() => {
         listen.disabled = false;
         listen.checked = source.state.kind === 'can' && source.state.listenOnly;
+        if (hadFocus) listen.focus(); // a disabled control drops the focus
+
       });
   });
 

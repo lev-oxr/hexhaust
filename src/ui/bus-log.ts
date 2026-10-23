@@ -43,7 +43,7 @@ export interface BusLog {
 const WHO: Record<FrameExplanation['direction'], { text: string; cls: string }> = {
   request: { text: 'tester', cls: 'who-tester' },
   response: { text: 'ECU', cls: 'who-ecu' },
-  other: { text: '?', cls: 'who-other' },
+  other: { text: 'other', cls: 'who-other' },
 };
 
 export function createBusLog(opts: BusLogOptions): BusLog {
@@ -180,7 +180,7 @@ export function createBusLog(opts: BusLogOptions): BusLog {
     if (frame.from === 'tester' && frame.data[0] >> 4 === 0) flagStalled();
     const stick = follow.checked;
     const entry: LogEntry = { seq: seq++, frame, ex: explainFrame(frame, opts.vocab) };
-    entry.message = tracker.annotate(frame, entry.ex);
+    if (entry.ex.direction !== 'other') entry.message = tracker.annotate(frame, entry.ex);
     const late = lateness.check(frame);
     if (late) {
       markLate(entry.ex, late);
